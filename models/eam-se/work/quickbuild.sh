@@ -11,7 +11,7 @@ export DART="$(git rev-parse --show-toplevel)/DART"
 source "$DART"/build_templates/buildfunctions.sh
 
 # This is where the model directory is relative to DART
-MODEL="../../models/eam"
+MODEL="../../models/eam-se"
 LOCATION=threed_sphere
 
 programs=(

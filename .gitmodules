@@ -1,0 +1,4 @@
+[submodule "DART"]
+	path = DART
+	url = https://github.com/NCAR/DART.git
+	branch = main

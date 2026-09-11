@@ -7,18 +7,20 @@
 main() {
 
 # DART is a submodule of this repo (checked out at the top level as DART/),
-# not the top-level git repo itself, so point DART at the submodule path
-# instead of using `git rev-parse --show-toplevel` directly.
 export DART="$(git rev-parse --show-toplevel)/DART"
 source "$DART"/build_templates/buildfunctions.sh
 
-MODEL=elm
+# This is where the model directory is relative to DART
+MODEL="../../models/eam"
 LOCATION=threed_sphere
 
 programs=(
+closest_member_tool
 filter
 model_mod_check
 perfect_model_obs
+perturb_single_instance
+wakeup_filter
 )
 
 serial_programs=(
@@ -26,14 +28,20 @@ advance_time
 create_fixed_network_seq
 create_obs_sequence
 fill_inflation_restart
+obs_common_subset
 obs_diag
+obs_impact_tool
+obs_selection
+obs_seq_coverage
 obs_seq_to_netcdf
+obs_seq_verify
 obs_sequence_tool
+compare_states
+compute_error
 )
 
 model_serial_programs=(
-elm_to_dart
-dart_to_elm
+column_rand
 )
 
 arguments "$@"

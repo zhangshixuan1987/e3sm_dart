@@ -1,9 +1,9 @@
 # example_repo
 
-Scripts, namelists, and model interface code for running DART, developed and
-maintained outside of the DART repository itself. DART is included as a git
-submodule rather than copied in, so the E3SM infrastructure can be hosted 
-separately from NCAR/DART.
+Scripts, namelists, and model interface code for running DART, for interfaces
+developed and maintained outside of the DART repository itself. 
+DART is included as a git submodule rather than copied in, so the E3SM infrastructure 
+can be hosted  separately from NCAR/DART.
 
 ## Layout
 
@@ -13,17 +13,24 @@ docs/      documentation
 DART/      git submodule, https://github.com/NCAR/DART
 elm/       DART interface for the E3SM Land Model (ELM)
   model_mod.f90
+  dart_to_elm.f90 
+  elm_to_dart.f90
   work/
     input.nml
-    quickbuild.sh   # builds DART executables for ELM; DART path set below
-eam/       DART interface for the E3SM Atmosphere Model (EAM)
+    quickbuild.sh   
+eam-se/       DART interface for the E3SM Atmosphere Model (EAM)
   model_mod.f90
+  chem_tables_mod.f90
+  column_rand.f90
+  eam_common_code_mod.f90
   work/
     input.nml
-    quickbuild.sh   # builds DART executables for EAM; DART path set below
+    quickbuild.sh   
 ```
 
 ## Getting started
+
+The .gitmodules file shows the DART repo and branch (I've put NCAR/DART and main for now)
 
 Clone with submodules so DART comes along:
 
@@ -38,6 +45,8 @@ git submodule update --init --recursive
 ```
 
 To pull in DART updates later:
+
+Note I've put in main here, but maybe you are using a different branch (e.g. strongly_coupled)
 
 ```
 cd DART

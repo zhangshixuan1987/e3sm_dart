@@ -1,7 +1,7 @@
 [submodule "DART"]
 	path = DART
-	url = https://github.com/NCAR/DART.git
-	branch = main
+	url = https://github.com/zhangshixuan1987/DART.git
+	branch = eam-strongly-coupled
 [submodule "E3SM"]
 	path = E3SM
 	url = https://github.com/E3SM-Project/E3SM.git

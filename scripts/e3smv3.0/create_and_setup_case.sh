@@ -6,6 +6,7 @@
 # The workflow root is resolved from this configuration file at source time.
 _my_config_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 export my_workflow_root="${_my_config_dir}"
+export my_repository_root="$(cd -- "${_my_config_dir}/../.." && pwd -P)"
 unset _my_config_dir
 export my_workflow_lib="${my_workflow_root}/workflow_lib"
 export my_runtime_dir="${my_workflow_root}/runtmp"
@@ -62,7 +63,7 @@ export my_cycle_shutdown_margin_sec=900
 # --- E3SM experiment identity and output paths -------------------------------
 # my_runtype must be Full-CPL or AMIP; keep compset and reference files consistent.
 ################################################################################
-export my_e3sm_code="/qfs/people/zhan391/e3sm_dart_work/code/E3SMv3"
+export my_e3sm_code="${my_repository_root}/E3SM"
 export my_runtype="Full-CPL"
 export my_compset="WCYCL20TR"
 export my_resolution="ne30pg2_r05_IcoswISC30E3r5"
@@ -77,8 +78,8 @@ export my_modeldir="${my_runpath}/${my_casename}"
 export my_modelcase="${my_modeldir}/case_scripts"
 export my_modelexe="${my_modeldir}/build/e3sm.exe"
 export my_eam_topography_file="/compyfs/inputdata/atm/cam/topo/USGS-gtopo30_ne30np4pg2_x6t-SGH.c20210614.nc"
-export my_eam_se_mapping_file="/qfs/people/zhan391/e3sm_dart_work/code/HOMME/SEMapping.nc"
-export my_eam_cs_grid_file="/qfs/people/zhan391/e3sm_dart_work/code/DART/models/eam-se/work/SEMapping_cs_grid_NE30.nc"
+export my_eam_se_mapping_file="${my_repository_root}/models/homme/SEMapping.nc"
+export my_eam_cs_grid_file="${my_repository_root}/models/eam-se/work/SEMapping_cs_grid_NE30.nc"
 export my_eam_post_map_file="/compyfs/zhan391/acme_init/map_file/map_ne30pg2_to_cmip6_180x360_aave.20200201.nc"
 export my_elm_post_map_file="/compyfs/zhan391/acme_init/map_file/map_r05_to_cmip6_180x360_aave.20200901.nc"
 export my_amip_sst_data="/compyfs/zhan391/acme_init/SST_forcing/sst_ice_NOAA_AVHRR_E3SM_1x1_c20231225.nc"
@@ -126,7 +127,10 @@ export my_eam_dart_end_tod="${my_e3sm_end_tod}"
 export my_eam_dart_run_dir="${my_dart_root}/eam"
 export my_eam_dart_model="eam-se"
 export my_eam_dart_pgrid=".true."
-export my_eam_dart_code="/qfs/people/zhan391/e3sm_dart_work/code/DART"
+# E3SM-specific interfaces are maintained in this repository; upstream DART is
+# the DART submodule. Keep both roots explicit for workflow and upstream data.
+export my_dart_code="${my_repository_root}/DART"
+export my_eam_dart_code="${my_repository_root}"
 # Lowest EAM model level at which observations may be assimilated; levels
 # above it (smaller indices) are excluded near the diffusive model top.
 export my_eam_no_obs_assim_above_level=5
@@ -151,7 +155,7 @@ export my_elm_dart_cycle_hours=6
 export my_elm_dart_end_date="${my_e3sm_end_date}"
 export my_elm_dart_end_tod="${my_e3sm_end_tod}"
 export my_elm_dart_run_dir="${my_dart_root}/elm"
-export my_elm_dart_code="/qfs/people/zhan391/e3sm_dart_work/code/DART_SCP"
+export my_elm_dart_code="${my_repository_root}"
 export my_elm_sourcemods_dir="${my_elm_dart_code}/models/elm/DART_SourceMods/e3sm_maint_3.0/src.elm"
 export my_elm_dart_obsdir="/compyfs/zhan391/acme_init/Observations/SMAP"
 export my_elm_dart_model="elm"

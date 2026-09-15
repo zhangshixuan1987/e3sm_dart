@@ -63,6 +63,8 @@ done
 
 validate_positive_int "my_ensnum" "${my_ensnum}"
 
+[[ -x "${my_e3sm_code}/cime/scripts/create_newcase" ]] || \
+  fail "E3SM or its CIME submodule is incomplete: run 'git submodule update --init --recursive' from ${my_repository_root}"
 [[ -d "${my_elm_sourcemods_dir}" ]] || fail "missing ELM SourceMods directory: ${my_elm_sourcemods_dir}"
 mapfile -t elm_sourcemods < <(find "${my_elm_sourcemods_dir}" -maxdepth 1 -type f -name "*.F90" -print | sort)
 (( ${#elm_sourcemods[@]} > 0 )) || fail "no ELM Fortran SourceMods found in ${my_elm_sourcemods_dir}"

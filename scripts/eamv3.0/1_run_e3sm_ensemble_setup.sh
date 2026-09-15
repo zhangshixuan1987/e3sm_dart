@@ -63,6 +63,8 @@ done
 
 validate_positive_int "my_ensnum" "${my_ensnum}"
 
+[[ -x "${my_e3sm_code}/cime/scripts/create_newcase" ]] || \
+  fail "E3SM or its CIME submodule is incomplete: run 'git submodule update --init --recursive' from ${my_repository_root}"
 exec 8>"${my_lock_dir}/step1_setup.lock"
 flock -n 8 || fail "another step-1 setup is already running"
 

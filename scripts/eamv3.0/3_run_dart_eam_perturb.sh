@@ -403,7 +403,7 @@ ${COPY} -f ${DART_WORKDIR}/fill_inflation_restart ${CURRENT_DADIR} || exit 08
 
 if [ $DART_ENSNUM -gt 1 ] ; then
    SAMP_ERR_DIR=assimilation_code/programs/gen_sampling_err_table/work
-   SAMP_ERR_FILE=${DART_ROOT}/${SAMP_ERR_DIR}/sampling_error_correction_table.nc
+   SAMP_ERR_FILE=${my_dart_code}/${SAMP_ERR_DIR}/sampling_error_correction_table.nc
    if [ -e ${SAMP_ERR_FILE} ]; then
       ${COPY} -f ${VERBOSE} ${SAMP_ERR_FILE} ${CURRENT_DADIR}  || exit 09
       if [ ${DART_ENSNUM} -lt 3 ] || [ ${DART_ENSNUM} -gt 200 ]; then

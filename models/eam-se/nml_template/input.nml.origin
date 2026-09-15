@@ -1,5 +1,6 @@
 ! This namelist is set up for a single, EAM-SE, assimilation cycle
 ! using the default values as found in model_mod.f90 and
+! DART/eam-se/shell_scripts/setup_{hybrid,advanced}
 ! starting from a single model state, which must be perturbed into an ensemble.
 ! Comments below give suggestions for setting it up for other assimilations:
 ! > continuing an assimilation (no perturbations) and/or starting from an ensemble.
@@ -31,15 +32,14 @@
    input_state_files            = ''
    input_state_file_list        = 'eam_init_files'
    single_file_in               = .false.
-   perturb_from_single_instance = .false.
-   perturbation_amplitude       = 0.1
+   perturb_from_single_instance = .true.
    init_time_days               = -1
    init_time_seconds            = -1
 
    stages_to_write              = 'forecast','output'
 
    output_state_files           = ''
-   output_state_file_list       = 'eam_init_files'
+   output_state_file_list       = 'eam_out_files'
    output_mean                  = .true.
    output_sd                    = .true.
    output_members               = .true.
@@ -53,11 +53,11 @@
    distributed_state            = .true.
 
    inf_flavor                  = 5,                       0
-   inf_initial_from_restart    = .true.,                .false.
+   inf_initial_from_restart    = .true.,                  .false.
    inf_initial                 = 1.0,                     1.0
    inf_lower_bound             = 0.0,                     0.0
    inf_upper_bound             = 100.0,                   100.0
-   inf_sd_initial_from_restart = .true.,                .false.
+   inf_sd_initial_from_restart = .true.,                  .false.
    inf_sd_initial              = 0.6,                     0.6
    inf_sd_lower_bound          = 0.6,                     0.6
    inf_sd_max_change           = 1.05,                    1.05
@@ -89,9 +89,9 @@
    last_obs_seconds         = -1
    obs_window_days          = -1
    obs_window_seconds       = -1
-   adv_ens_command          = 'no_E3SM_advance_script'
-   tasks_per_model_advance  = -1  Used only for models run inside filter.
-   write_obs_every_cycle    = .false. intended for debugging when cycling inside filter.
+   adv_ens_command          = 'no_CESM_advance_script'
+   tasks_per_model_advance      = -1  Used only for models run inside filter.
+   write_obs_every_cycle        = .false. intended for debugging when cycling inside filter.
 
 &perfect_model_obs_nml
    read_input_state_from_file = .true.
@@ -159,7 +159,7 @@
 !     You can start with the minimum and increase it if there seems to be excessive
 !     noise in the upper layers.
 !
-! CAM-SE/CAM-FV Section
+! CAM-FV/CAM-SE Section
 !     Model top 220 Pa
 !     Number of CAM model top levels with extra diffusion, controlled by div24del2:
 !         2 = div2    -> 2 levels
@@ -176,6 +176,7 @@
 !        no_obs_assim_above_level            = 5       ! corresponds to ~3800 Pa
 !     32 levels (CAM6):
 !        no_obs_assim_above_level            = 5       ! corresponds to ~3600 Pa
+!
 ! WACCM 
 !     The model top for WACCM is (naturally) much higher: 4.5e-4 Pa
 !     The number of model top levels with extra diffusion is controlled by WACCM's 
@@ -188,27 +189,29 @@
 !        use_log_vertical_scale          = .true.
 !     This is recommended, but your own tuning experiments may support a different value.
 !        vert_normalization_scale_height = 1.5
+!
 ! EAM-SE Section
 !     The model top for EAM is (naturally) much higher than CAM: 0.1 Pa
-!     Use the suggested values for WACCM 
+!     Use the suggested values for WACCM
 !     use_log_vertical_scale          = .true.
 !     vert_normalization_scale_height = 1.5
 !     no_obs_assim_above_level        = 5  ! corresponds to ~50 Pa where molecular diffusion starts
-!
 !========================================================================
 
 &model_nml
-   eam_template_filename               = 'eaminput.nc'
-   eam_phis_filename                   = 'eam_phis.nc'
-   eam_use_pgrid                       = .true.
-   homme_map_file                      = 'SEMapping.nc'
-   cs_grid_file                        = 'SEMapping_cs_grid.nc'
+   dry_mass_vertical_coordinate    = .true.
+   precise_dry_mass_get_close      = .false.
+   homme_map_file                  = 'SEMapping.nc'
+   cs_grid_file                    = 'SEMapping_cs_grid.nc'
+   eam_template_filename           = 'eaminput.nc'
+   eam_phis_filename               = 'eam_phis.nc'
+   eam_use_pgrid                   = .true.
    custom_routine_to_generate_ensemble = .true.
-   fields_to_perturb                   = ''
+   fields_to_perturb                   = 'QTY_TEMPERATURE'
    perturbation_amplitude              = 0.1
    state_variables  = 'T',     'QTY_TEMPERATURE',         'NA', 'NA', 'UPDATE'
-                      'U',     'QTY_U_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
-                      'V',     'QTY_V_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
+                      'U',    'QTY_U_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
+                      'V',    'QTY_V_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
                       'Q',     'QTY_SPECIFIC_HUMIDITY',   'NA', 'NA', 'UPDATE'
                       'CLDLIQ','QTY_CLOUD_LIQUID_WATER',  'NA', 'NA', 'UPDATE'
                       'CLDICE','QTY_CLOUD_ICE',           'NA', 'NA', 'UPDATE'
@@ -219,11 +222,11 @@
    vertical_localization_coord         = 'SCALEHEIGHT'
    no_obs_assim_above_level            = 5
    model_damping_ends_at_level         = -1
-   using_chemistry                     = .false.
-   assimilation_period_days            = 0
-   assimilation_period_seconds         = 21600
-   suppress_grid_info_in_output        = .false.
-   debug_level                         = 0
+   using_chemistry                = .false.
+   assimilation_period_days       = 0
+   assimilation_period_seconds    = 21600
+   suppress_grid_info_in_output   = .false.
+   debug_level                    = 0
    /
 
 ! Other fields in the EAM initial file, which could be included in the model state:
@@ -291,23 +294,23 @@
    /
 
 ! to use chemistry or saber temperatures, include the following below.
-!                             '../../../DART/observations/forward_operators/obs_def_CO_Nadir_mod.f90',
-!                             '../../../DART/observations/forward_operators/obs_def_SABER_mod.f90',
-!                             '../../../DART/observations/forward_operators/obs_def_MOPITT_CO_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_CO_Nadir_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_SABER_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_MOPITT_CO_mod.f90',
 
 &preprocess_nml
    overwrite_output        = .true.
-   input_obs_qty_mod_file  = '../../../DART/assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
-   output_obs_qty_mod_file = '../../../DART/assimilation_code/modules/observations/obs_kind_mod.f90'
-   input_obs_def_mod_file  = '../../../DART/observations/forward_operators/DEFAULT_obs_def_mod.F90'
-   output_obs_def_mod_file = '../../../DART/observations/forward_operators/obs_def_mod.f90'
-   obs_type_files          = '../../../DART/observations/forward_operators/obs_def_gps_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_upper_atm_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_altimeter_mod.f90'
-   quantity_files          = '../../../DART/assimilation_code/modules/observations/atmosphere_quantities_mod.f90',
-                             '../../../DART/assimilation_code/modules/observations/space_quantities_mod.f90',
-                             '../../../DART/assimilation_code/modules/observations/chemistry_quantities_mod.f90'
+   input_obs_qty_mod_file  = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
+   output_obs_qty_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90'
+   input_obs_def_mod_file  = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90'
+   output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90'
+   obs_type_files          = '../../../observations/forward_operators/obs_def_gps_mod.f90',
+                             '../../../observations/forward_operators/obs_def_upper_atm_mod.f90',
+                             '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
+                             '../../../observations/forward_operators/obs_def_altimeter_mod.f90'
+   quantity_files          = '../../../assimilation_code/modules/observations/atmosphere_quantities_mod.f90',
+                             '../../../assimilation_code/modules/observations/space_quantities_mod.f90',
+                             '../../../assimilation_code/modules/observations/chemistry_quantities_mod.f90'
    /
 
 ! Not usually assimilated.  No fundamental reason not to.
@@ -322,21 +325,17 @@
    assimilate_these_obs_types = 'RADIOSONDE_U_WIND_COMPONENT',
                                 'RADIOSONDE_V_WIND_COMPONENT',
                                 'RADIOSONDE_TEMPERATURE',
-                                'RADIOSONDE_SPECIFIC_HUMIDITY',
                                 'AIRCRAFT_U_WIND_COMPONENT',
                                 'AIRCRAFT_V_WIND_COMPONENT',
                                 'AIRCRAFT_TEMPERATURE',
                                 'ACARS_U_WIND_COMPONENT',
                                 'ACARS_V_WIND_COMPONENT',
                                 'ACARS_TEMPERATURE',
-                                'AIRS_TEMPERATURE',
-                                'AIRS_SPECIFIC_HUMIDITY',
                                 'SAT_U_WIND_COMPONENT',
                                 'SAT_V_WIND_COMPONENT',
                                 'GPSRO_REFRACTIVITY'
 
-   evaluate_these_obs_types = ''
-
+   evaluate_these_obs_types = 'RADIOSONDE_SPECIFIC_HUMIDITY',
    /
 
 &probit_transform_nml
@@ -358,7 +357,7 @@
 
 &ensemble_manager_nml
    layout         = 2
-   tasks_per_node = 40
+   tasks_per_node = 16
    /
 
 
@@ -383,6 +382,9 @@
    convert_all_state_verticals_first = .true.
    print_every_nth_obs               = 10000
    /
+
+&algorithm_info_nml
+   qceff_table_filename = 'qceff_table.csv'
 
 &cov_cutoff_nml
    select_localization = 1
@@ -562,12 +564,12 @@
    trusted_obs       = 'null'
    plevel_edges = 1035.5, 962.5, 887.5, 775, 600, 450, 350, 275, 225,   175,   125,   75,   35,   15,    2
    hlevel_edges =    200, 630,   930,  1880,3670,5680,7440,9130,10530,12290, 14650,18220,23560,29490,43000
-   Nregions     = 4
-   reg_names    = 'Northern Hemisphere', 'Tropics', 'Southern Hemisphere', 'North America'
-   lonlim1      =   0.0,   0.0,   0.0, 235.0
-   lonlim2      = 360.0, 360.0, 360.0, 295.0
-   latlim1      =  20.0, -20.0, -90.0, 25.0
-   latlim2      =  90.0,  20.0, -20.0, 55.0
+   Nregions     = 3
+   reg_names    = 'Northern Hemisphere', 'Tropics', 'Southern Hemisphere'
+   lonlim1      =   0.0,   0.0,   0.0
+   lonlim2      = 360.0, 360.0, 360.0
+   latlim1      =  20.0, -20.0, -90.0
+   latlim2      =  90.0,  20.0, -20.0
    print_mismatched_locs = .false.
    create_rank_histogram = .true.
    outliers_in_histogram = .true.
@@ -642,7 +644,7 @@
    input_files            = 'eaminput.nc'
    output_files           = 'eam_pert1.nc','eam_pert2.nc','eam_pert3.nc'
    output_file_list       = ''
-   perturbation_amplitude = 0.1
+   perturbation_amplitude = 0.2
    /
 
 

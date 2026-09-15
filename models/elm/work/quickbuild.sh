@@ -6,13 +6,12 @@
 
 main() {
 
-# DART is a submodule of this repo (checked out at the top level as DART/),
-export DART="$(git rev-parse --show-toplevel)/DART"
+export DART=$(git rev-parse --show-toplevel)
 source "$DART"/build_templates/buildfunctions.sh
 
-# This is the path to the model directory relative to DART
-MODEL="../../models/elm"
+MODEL=elm
 LOCATION=threed_sphere
+
 
 programs=(
 filter

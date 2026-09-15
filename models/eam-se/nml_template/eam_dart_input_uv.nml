@@ -291,23 +291,23 @@
    /
 
 ! to use chemistry or saber temperatures, include the following below.
-!                             '../../../DART/observations/forward_operators/obs_def_CO_Nadir_mod.f90',
-!                             '../../../DART/observations/forward_operators/obs_def_SABER_mod.f90',
-!                             '../../../DART/observations/forward_operators/obs_def_MOPITT_CO_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_CO_Nadir_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_SABER_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_MOPITT_CO_mod.f90',
 
 &preprocess_nml
    overwrite_output        = .true.
-   input_obs_qty_mod_file  = '../../../DART/assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
-   output_obs_qty_mod_file = '../../../DART/assimilation_code/modules/observations/obs_kind_mod.f90'
-   input_obs_def_mod_file  = '../../../DART/observations/forward_operators/DEFAULT_obs_def_mod.F90'
-   output_obs_def_mod_file = '../../../DART/observations/forward_operators/obs_def_mod.f90'
-   obs_type_files          = '../../../DART/observations/forward_operators/obs_def_gps_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_upper_atm_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_altimeter_mod.f90'
-   quantity_files          = '../../../DART/assimilation_code/modules/observations/atmosphere_quantities_mod.f90',
-                             '../../../DART/assimilation_code/modules/observations/space_quantities_mod.f90',
-                             '../../../DART/assimilation_code/modules/observations/chemistry_quantities_mod.f90'
+   input_obs_qty_mod_file  = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
+   output_obs_qty_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90'
+   input_obs_def_mod_file  = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90'
+   output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90'
+   obs_type_files          = '../../../observations/forward_operators/obs_def_gps_mod.f90',
+                             '../../../observations/forward_operators/obs_def_upper_atm_mod.f90',
+                             '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
+                             '../../../observations/forward_operators/obs_def_altimeter_mod.f90'
+   quantity_files          = '../../../assimilation_code/modules/observations/atmosphere_quantities_mod.f90',
+                             '../../../assimilation_code/modules/observations/space_quantities_mod.f90',
+                             '../../../assimilation_code/modules/observations/chemistry_quantities_mod.f90'
    /
 
 ! Not usually assimilated.  No fundamental reason not to.
@@ -321,23 +321,22 @@
 &obs_kind_nml
    assimilate_these_obs_types = 'RADIOSONDE_U_WIND_COMPONENT',
                                 'RADIOSONDE_V_WIND_COMPONENT',
-                                'RADIOSONDE_TEMPERATURE',
-                                'RADIOSONDE_SPECIFIC_HUMIDITY',
                                 'AIRCRAFT_U_WIND_COMPONENT',
                                 'AIRCRAFT_V_WIND_COMPONENT',
-                                'AIRCRAFT_TEMPERATURE',
                                 'ACARS_U_WIND_COMPONENT',
                                 'ACARS_V_WIND_COMPONENT',
-                                'ACARS_TEMPERATURE',
-                                'AIRS_TEMPERATURE',
-                                'AIRS_SPECIFIC_HUMIDITY',
                                 'SAT_U_WIND_COMPONENT',
                                 'SAT_V_WIND_COMPONENT',
-                                'GPSRO_REFRACTIVITY'
 
-   evaluate_these_obs_types = ''
-
+   evaluate_these_obs_types = 'RADIOSONDE_SPECIFIC_HUMIDITY',
+                              'AIRS_SPECIFIC_HUMIDITY',
+                              'RADIOSONDE_TEMPERATURE',
+                              'AIRCRAFT_TEMPERATURE',
+                              'ACARS_TEMPERATURE',
+                              'AIRS_TEMPERATURE',
+                              'GPSRO_REFRACTIVITY',
    /
+
 
 &probit_transform_nml
    /

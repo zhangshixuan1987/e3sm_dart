@@ -42,7 +42,7 @@
    obs_sequence_out_name    = 'obs_seq.final'
    input_state_file_list    = 'restart_files.txt',
                               'history_files.txt',
-                              'vector_files.txt' 
+                              'vector_files.txt'
    output_state_file_list   = 'restart_files.txt',
                               'history_files.txt',
                               'vector_files.txt'
@@ -187,8 +187,8 @@
                                 'TOWER_SENSIBLE_HEAT_FLUX',
                                 'MODIS_SNOWCOVER_FRAC',
                                 'MODIS_LEAF_AREA_INDEX',
-                                'SMAP_A_SOIL_MOISTURE',
                                 'MODIS_FPAR',
+                                'SMAP_A_SOIL_MOISTURE',
                                 'BIOMASS',
                                 'OCO2_SIF'
    evaluate_these_obs_types   = 'null'
@@ -218,14 +218,17 @@
    calendar                     = 'Gregorian'
    debug                        = 0
    elm_variables  = 'leafc',       'QTY_LEAF_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
+                    'leafn',       'QTY_LEAF_NITROGEN',          '0.0', 'NA', 'restart' , 'UPDATE',
+                    'frootc',      'QTY_ROOT_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
                     'frac_sno',    'QTY_SNOWCOVER_FRAC',         '0.0', '1.', 'restart' , 'NO_COPY_BACK',
+                    'cpool',       'QTY_CARBON',                 '0.0', 'NA', 'restart' , 'UPDATE',
                     'SNOW_DEPTH',  'QTY_SNOW_THICKNESS',         '0.0', 'NA', 'restart' , 'NO_COPY_BACK',
+                    'H2OSNO',      'QTY_SNOW_WATER',             '0.0', 'NA', 'restart' , 'UPDATE',
                     'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',      '0.0', 'NA', 'restart' , 'UPDATE',
                     'H2OSOI_ICE',  'QTY_SOIL_ICE',               '0.0', 'NA', 'restart' , 'UPDATE',
                     'T_SOISNO',    'QTY_TEMPERATURE',            '0.0', 'NA', 'restart' , 'UPDATE',
                     'livestemc',   'QTY_LIVE_STEM_CARBON',       '0.0', 'NA', 'restart' , 'UPDATE',
                     'deadstemc',   'QTY_DEAD_STEM_CARBON',       '0.0', 'NA', 'restart' , 'UPDATE',
-                    'NEP',         'QTY_NET_CARBON_PRODUCTION',  'NA' , 'NA', 'history' , 'NO_COPY_BACK',
                     'H2OSOI',      'QTY_SOIL_MOISTURE',          '0.0', 'NA', 'history' , 'NO_COPY_BACK',
                     'SMINN_vr',    'QTY_SOIL_MINERAL_NITROGEN',  '0.0', 'NA', 'history' , 'NO_COPY_BACK',
                     'LITR1N_vr',   'QTY_NITROGEN',               '0.0', 'NA', 'history' , 'NO_COPY_BACK',
@@ -237,11 +240,16 @@
                     'H2OSNO',      'QTY_SNOW_WATER',             '0.0', 'NA', 'vector'  , 'NO_COPY_BACK',
                     'TLAI',        'QTY_LEAF_AREA_INDEX',        '0.0', 'NA', 'vector'  , 'NO_COPY_BACK',
                     'TWS',         'QTY_TOTAL_WATER_STORAGE',    'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
-                    'SMP',         'QTY_SOIL_MATRIC_POTENTIAL',  '0.0', 'NA', 'vector'  , 'NO_COPY_BACK'
+                    'SMP',         'QTY_SOIL_MATRIC_POTENTIAL',  '0.0', 'NA', 'vector'  , 'NO_COPY_BACK',
+                    'NEP',         'QTY_NET_CARBON_PRODUCTION',  'NA' , 'NA', 'history' , 'NO_COPY_BACK',
+                    'TV',          'QTY_VEGETATION_TEMPERATURE', 'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
+                    'RH2M_R',      'QTY_SPECIFIC_HUMIDITY',      'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
+                    'PBOT',        'QTY_SURFACE_PRESSURE',       'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
+                    'TBOT',        'QTY_TEMPERATURE',            'NA' , 'NA', 'vector'  , 'NO_COPY_BACK'
    /
 
 # The list of variables and the files they come from are designed to exercise all likely 'shapes' of
-# variables encountered and the fact we are interested in snow and soil moisure DA 
+# variables encountered and the fact we are interested in snow and soil moisure DA
 # RESTART
 #       double leafc(    pft) ;
 #       double frac_sno( column) ;
@@ -393,4 +401,3 @@
    do_all_numeric_fields   = .true.
    only_report_differences = .true.
   /
-

@@ -31,8 +31,8 @@
    input_state_files            = ''
    input_state_file_list        = 'eam_init_files'
    single_file_in               = .false.
-   perturb_from_single_instance = .false.
-   perturbation_amplitude       = 0.1
+   perturb_from_single_instance = .true.
+   perturbation_amplitude       = 0.1  !(ignored, because model_mod defines it)
    init_time_days               = -1
    init_time_seconds            = -1
 
@@ -53,11 +53,11 @@
    distributed_state            = .true.
 
    inf_flavor                  = 5,                       0
-   inf_initial_from_restart    = .true.,                .false.
+   inf_initial_from_restart    = .false.,                .false.
    inf_initial                 = 1.0,                     1.0
    inf_lower_bound             = 0.0,                     0.0
    inf_upper_bound             = 100.0,                   100.0
-   inf_sd_initial_from_restart = .true.,                .false.
+   inf_sd_initial_from_restart = .false.,                .false.
    inf_sd_initial              = 0.6,                     0.6
    inf_sd_lower_bound          = 0.6,                     0.6
    inf_sd_max_change           = 1.05,                    1.05
@@ -204,7 +204,7 @@
    homme_map_file                      = 'SEMapping.nc'
    cs_grid_file                        = 'SEMapping_cs_grid.nc'
    custom_routine_to_generate_ensemble = .true.
-   fields_to_perturb                   = ''
+   fields_to_perturb                   = 'QTY_TEMPERATURE'
    perturbation_amplitude              = 0.1
    state_variables  = 'T',     'QTY_TEMPERATURE',         'NA', 'NA', 'UPDATE'
                       'U',     'QTY_U_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
@@ -291,23 +291,23 @@
    /
 
 ! to use chemistry or saber temperatures, include the following below.
-!                             '../../../DART/observations/forward_operators/obs_def_CO_Nadir_mod.f90',
-!                             '../../../DART/observations/forward_operators/obs_def_SABER_mod.f90',
-!                             '../../../DART/observations/forward_operators/obs_def_MOPITT_CO_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_CO_Nadir_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_SABER_mod.f90',
+!                             '../../../observations/forward_operators/obs_def_MOPITT_CO_mod.f90',
 
 &preprocess_nml
    overwrite_output        = .true.
-   input_obs_qty_mod_file  = '../../../DART/assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
-   output_obs_qty_mod_file = '../../../DART/assimilation_code/modules/observations/obs_kind_mod.f90'
-   input_obs_def_mod_file  = '../../../DART/observations/forward_operators/DEFAULT_obs_def_mod.F90'
-   output_obs_def_mod_file = '../../../DART/observations/forward_operators/obs_def_mod.f90'
-   obs_type_files          = '../../../DART/observations/forward_operators/obs_def_gps_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_upper_atm_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_altimeter_mod.f90'
-   quantity_files          = '../../../DART/assimilation_code/modules/observations/atmosphere_quantities_mod.f90',
-                             '../../../DART/assimilation_code/modules/observations/space_quantities_mod.f90',
-                             '../../../DART/assimilation_code/modules/observations/chemistry_quantities_mod.f90'
+   input_obs_qty_mod_file  = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
+   output_obs_qty_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90'
+   input_obs_def_mod_file  = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90'
+   output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90'
+   obs_type_files          = '../../../observations/forward_operators/obs_def_gps_mod.f90',
+                             '../../../observations/forward_operators/obs_def_upper_atm_mod.f90',
+                             '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
+                             '../../../observations/forward_operators/obs_def_altimeter_mod.f90'
+   quantity_files          = '../../../assimilation_code/modules/observations/atmosphere_quantities_mod.f90',
+                             '../../../assimilation_code/modules/observations/space_quantities_mod.f90',
+                             '../../../assimilation_code/modules/observations/chemistry_quantities_mod.f90'
    /
 
 ! Not usually assimilated.  No fundamental reason not to.
@@ -322,7 +322,6 @@
    assimilate_these_obs_types = 'RADIOSONDE_U_WIND_COMPONENT',
                                 'RADIOSONDE_V_WIND_COMPONENT',
                                 'RADIOSONDE_TEMPERATURE',
-                                'RADIOSONDE_SPECIFIC_HUMIDITY',
                                 'AIRCRAFT_U_WIND_COMPONENT',
                                 'AIRCRAFT_V_WIND_COMPONENT',
                                 'AIRCRAFT_TEMPERATURE',
@@ -330,13 +329,12 @@
                                 'ACARS_V_WIND_COMPONENT',
                                 'ACARS_TEMPERATURE',
                                 'AIRS_TEMPERATURE',
-                                'AIRS_SPECIFIC_HUMIDITY',
                                 'SAT_U_WIND_COMPONENT',
                                 'SAT_V_WIND_COMPONENT',
                                 'GPSRO_REFRACTIVITY'
 
-   evaluate_these_obs_types = ''
-
+   evaluate_these_obs_types = 'RADIOSONDE_SPECIFIC_HUMIDITY',
+                              'AIRS_SPECIFIC_HUMIDITY'
    /
 
 &probit_transform_nml
@@ -360,7 +358,6 @@
    layout         = 2
    tasks_per_node = 40
    /
-
 
 &assim_tools_nml
    cutoff                            = 0.15
@@ -640,8 +637,8 @@
 &perturb_single_instance_nml
    ens_size               = 3
    input_files            = 'eaminput.nc'
-   output_files           = 'eam_pert1.nc','eam_pert2.nc','eam_pert3.nc'
-   output_file_list       = ''
+   output_files           = ''
+   output_file_list       = 'eam_init_files'
    perturbation_amplitude = 0.1
    /
 

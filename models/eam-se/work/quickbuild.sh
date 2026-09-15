@@ -13,6 +13,7 @@ source "$DART"/build_templates/buildfunctions.sh
 # This is where the model directory is relative to DART
 MODEL="../../models/eam-se"
 LOCATION=threed_sphere
+EXTRA="../../models/eam-common-code"
 
 programs=(
 closest_member_tool

@@ -8,9 +8,9 @@ Integration code lives in `models/` and `scripts/`. External source trees
 are managed separately as Git submodules so each repository revision can
 record the exact dependency commits used for a build or experiment.
 
-The current development goal is to establish the EAM–DART workflow using
-upstream NCAR/DART before integrating the strongly coupled DART branch.
-Compatibility must be verified by building and testing the model interfaces.
+This `strongly-coupled` parent branch uses the `eam-strongly-coupled` branch
+from the project DART fork. Compatibility must be verified by building and
+testing both model interfaces and the coupled assimilation sequence.
 See [`docs/README.md`](docs/README.md) for the detailed integration and
 workflow guide.
 
@@ -93,18 +93,18 @@ A matching commit does **not** necessarily mean the latest upstream commit.
 
 ## Understanding the DART Submodule
 
-The upstream DART configuration is:
+The DART configuration on this branch is:
 
 ```ini
 [submodule "DART"]
     path = DART
-    url = https://github.com/NCAR/DART.git
-    branch = main
+    url = https://github.com/zhangshixuan1987/DART.git
+    branch = eam-strongly-coupled
 ```
 
-The parent repository records a **specific DART commit**. The
-`branch = main` setting specifies which branch to use for an explicit
-remote update; it does not automatically keep DART at the latest `main`.
+The parent repository records a **specific DART commit**. The branch setting
+specifies which branch to use for an explicit remote update; it does not
+automatically keep DART at the latest `eam-strongly-coupled` commit.
 
 Normal cloning and this command restore the recorded commit:
 
@@ -340,19 +340,18 @@ git push
 
 This is an intentional dependency update, not a required step for every build.
 
-### Switch to strongly coupled DART
+### Strongly coupled DART used by this branch
 
 The strongly coupled development source is:
 
 - Repository: https://github.com/zhangshixuan1987/DART
 - Branch: `eam-strongly-coupled`
 
-When ready to test it, run from the repository root with clean working trees:
+This parent branch is already configured to use that source. To synchronize an
+existing checkout and deliberately test the current branch tip, run from the
+repository root with clean working trees:
 
 ```bash
-git config -f .gitmodules submodule.DART.url https://github.com/zhangshixuan1987/DART.git
-git config -f .gitmodules submodule.DART.branch eam-strongly-coupled
-
 git submodule sync -- DART
 git submodule update --init --remote DART
 git submodule update --init --recursive DART
@@ -425,8 +424,8 @@ cleanup procedure before rebuilding.
 
 ### Interface API errors against upstream DART
 
-Interface code copied from the strongly coupled branch may depend on APIs
-not present in the pinned upstream DART revision.
+Interface code copied from another DART revision may depend on APIs not present
+in the strongly coupled revision pinned by this parent branch.
 
 Check the missing routines, types, or namelist settings against both source
 versions. A repository-layout fix alone will not resolve an API mismatch.

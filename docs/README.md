@@ -8,7 +8,7 @@ Git submodules, while the integration code is maintained in this repository.
 
 ```text
 E3SM_DART/
-├── DART/                  # Pinned NCAR/DART Git submodule
+├── DART/                  # Pinned strongly coupled DART submodule
 ├── E3SM/                  # Pinned E3SM maint-3.0 Git submodule
 ├── models/                # E3SM-specific model interfaces and supporting data
 │   ├── eam-se/            # EAM-SE DART interface, namelists, and build directory
@@ -39,7 +39,7 @@ branch automatically.
 
 | Dependency | Upstream branch | Pinned commit |
 | --- | --- | --- |
-| NCAR/DART | `main` | `7bbd35a0995726b0274dc73a1b5783979d0f42d9` |
+| zhangshixuan1987/DART | `eam-strongly-coupled` | `9e0ae41b2a910224cd5dcf913620e35319ddf23d` |
 | E3SM-Project/E3SM | `maint-3.0` | `34bd782d18dda06d2ed5945f9b276770f946f200` |
 
 Update this table whenever either gitlink is deliberately advanced and tested.
@@ -92,9 +92,9 @@ test -x models/elm/work/quickbuild.sh
 
 The commits printed for `DART` and `E3SM` are the revisions recorded by this
 repository. A detached HEAD inside either directory is normal for a submodule
-checkout. `.gitmodules` tracks NCAR/DART `main` and E3SM-Project/E3SM
-`maint-3.0`, but reproducible clones use the exact commits recorded by the
-parent repository.
+checkout. On this parent branch, `.gitmodules` tracks the project DART fork's
+`eam-strongly-coupled` branch and E3SM-Project/E3SM `maint-3.0`, but
+reproducible clones use the exact commits recorded by the parent repository.
 
 All maintained workflow code paths are derived from the location of
 `create_and_setup_case.sh`. The checkout may therefore be moved to a different
@@ -235,9 +235,9 @@ models/<model-name>/
 ```
 
 When adding a source file, also update the appropriate `quickbuild.sh` or
-preprocess configuration so the file is actually compiled. Avoid modifying
-`DART/models/` for an E3SM-specific interface; changes there belong to the
-upstream NCAR/DART development process.
+preprocess configuration so the file is actually compiled. Keep the maintained
+E3SM interfaces under this repository's `models/`; make DART core changes in
+the configured DART fork and then advance the recorded submodule commit.
 
 Before committing an interface change:
 
@@ -263,8 +263,8 @@ git commit -m "Update DART submodule to <revision>"
 
 After changing the submodule revision, rebuild and test both EAM-SE and ELM.
 Do not commit an untested moving branch tip merely because `.gitmodules`
-declares `branch = main`; ordinary clones use the exact commit recorded by the
-parent repository.
+declares `branch = eam-strongly-coupled`; ordinary clones use the exact commit
+recorded by the parent repository.
 
 ## Update the E3SM submodule
 

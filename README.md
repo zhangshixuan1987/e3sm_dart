@@ -325,10 +325,14 @@ Run from the repository root:
 
 ```bash
 git submodule update --init --remote DART
-git submodule update --init --recursive DART
+git -C DART submodule update --init --recursive
 git -C DART log -1 --oneline
 git diff --submodule=log
 ```
+
+Run the recursive update from inside `DART/`. A top-level
+`git submodule update --init --recursive DART` would check out the DART commit
+currently pinned by this repository and could undo the remote update.
 
 Build and test the interfaces. If the new revision is suitable, record it:
 
@@ -354,7 +358,7 @@ repository root with clean working trees:
 ```bash
 git submodule sync -- DART
 git submodule update --init --remote DART
-git submodule update --init --recursive DART
+git -C DART submodule update --init --recursive
 
 git -C DART log -1 --oneline
 git diff --submodule=log

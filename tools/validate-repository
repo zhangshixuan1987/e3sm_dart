@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+errors=0
+
+usage() {
+  cat <<'EOF'
+Usage: tools/validate-repository [--require-recorded] [PROFILE]
+
+Validate submodule commits, stable paths, tracked links, executable modes, and
+Bash syntax. PROFILE defaults to baseline and may be a profile name or path.
+
+  --require-recorded  Also require the parent commit's gitlinks to match the
+                      profile; use this before a production experiment.
+EOF
+}
+
+require_recorded=false
+profile=baseline
+profile_seen=false
+while (( $# > 0 )); do
+  case "$1" in
+    --require-recorded) require_recorded=true ;;
+    -h|--help) usage; exit 0 ;;
+    -*) usage >&2; printf 'ERROR: unknown option: %s\n' "$1" >&2; exit 2 ;;
+    *)
+      [[ "${profile_seen}" == false ]] || {
+        usage >&2
+        printf 'ERROR: only one profile may be specified\n' >&2
+        exit 2
+      }
+      profile=$1
+      profile_seen=true
+      ;;
+  esac
+  shift
+done
+
+error() {
+  printf 'ERROR: %s\n' "$*" >&2
+  errors=$((errors + 1))
+}
+
+repository_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  printf 'ERROR: not in a Git repository\n' >&2
+  exit 1
+}
+source "${repository_root}/tools/version-profile-lib.sh"
+profile_file=$(resolve_profile "${repository_root}" "${profile}") || exit 1
+load_profile "${profile_file}" || exit 1
+cd "${repository_root}"
+
+for mapping in 'DART:DART' 'E3SM:E3SM'; do
+  name=${mapping%%:*}
+  expected_path=${mapping#*:}
+  actual_path=$(git config -f .gitmodules --get "submodule.${name}.path" || true)
+  [[ "${actual_path}" == "${expected_path}" ]] || \
+    error "submodule ${name} must use stable path ${expected_path}; found ${actual_path:-unset}"
+done
+
+for required in \
+  DART/build_templates/buildfunctions.sh \
+  E3SM/cime/scripts/create_newcase; do
+  [[ -e "${required}" ]] || error "required submodule file is missing: ${required}"
+done
+
+if git -C DART rev-parse --git-dir >/dev/null 2>&1; then
+  actual_dart_sha=$(git -C DART rev-parse HEAD)
+  [[ "${actual_dart_sha}" == "${DART_SHA}" ]] || \
+    error "DART is ${actual_dart_sha}; profile ${PROFILE_NAME} requires ${DART_SHA}"
+  [[ -z "$(git -C DART status --porcelain)" ]] || error "DART contains local changes"
+else
+  error "DART submodule is not initialized"
+fi
+
+if git -C E3SM rev-parse --git-dir >/dev/null 2>&1; then
+  actual_e3sm_sha=$(git -C E3SM rev-parse HEAD)
+  [[ "${actual_e3sm_sha}" == "${E3SM_SHA}" ]] || \
+    error "E3SM is ${actual_e3sm_sha}; profile ${PROFILE_NAME} requires ${E3SM_SHA}"
+  [[ -z "$(git -C E3SM status --porcelain)" ]] || error "E3SM contains local changes"
+else
+  error "E3SM submodule is not initialized"
+fi
+
+recorded_dart_sha=$(submodule_recorded_sha "${repository_root}" DART)
+recorded_e3sm_sha=$(submodule_recorded_sha "${repository_root}" E3SM)
+for dependency in DART E3SM; do
+  if [[ "${dependency}" == DART ]]; then
+    recorded_sha=${recorded_dart_sha}
+    profile_sha=${DART_SHA}
+  else
+    recorded_sha=${recorded_e3sm_sha}
+    profile_sha=${E3SM_SHA}
+  fi
+  if [[ "${recorded_sha}" != "${profile_sha}" ]]; then
+    if [[ "${require_recorded}" == true ]]; then
+      error "parent gitlink for ${dependency} is ${recorded_sha}; profile requires ${profile_sha}"
+    else
+      printf 'WARNING: profile %s is a candidate; parent gitlink for %s records %s\n' \
+        "${PROFILE_NAME}" "${dependency}" "${recorded_sha}" >&2
+    fi
+  fi
+done
+
+while IFS= read -r link; do
+  [[ -e "${link}" ]] || error "broken tracked symlink: ${link} -> $(readlink "${link}")"
+done < <(git ls-files -s | awk '$1 == "120000" {print $4}')
+
+while IFS= read -r script; do
+  bash -n "${script}" || error "Bash syntax check failed: ${script}"
+done < <(git ls-files -co --exclude-standard '*.sh')
+
+for script in tools/checkout-version tools/validate-repository tools/record-provenance; do
+  bash -n "${script}" || error "Bash syntax check failed: ${script}"
+done
+
+while IFS= read -r file; do
+  if [[ -f "${file}" && -x "${file}" ]] && ! head -c 2 "${file}" | grep -q '^#!'; then
+    error "tracked non-script file has executable mode: ${file}"
+  fi
+done < <(git ls-files -co --exclude-standard)
+
+if (( errors > 0 )); then
+  printf 'Repository validation failed with %d error(s).\n' "${errors}" >&2
+  exit 1
+fi
+
+printf 'Repository matches version profile %s.\n' "${PROFILE_NAME}"
+printf '  DART %s\n' "${DART_SHA}"
+printf '  E3SM %s\n' "${E3SM_SHA}"
+printf 'Tracked links, executable modes, and Bash scripts passed validation.\n'

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: tools/create-version-profile NAME [OUTPUT]
+
+Create a version profile from the DART and E3SM commits currently checked out.
+OUTPUT defaults to config/versions/NAME.conf. Existing files are not replaced.
+URLs and descriptive refs come from .gitmodules.
+EOF
+}
+
+if (( $# < 1 || $# > 2 )) || [[ "${1:-}" == -h || "${1:-}" == --help ]]; then
+  usage
+  [[ "${1:-}" == -h || "${1:-}" == --help ]] && exit 0
+  exit 2
+fi
+
+name=$1
+[[ "${name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || \
+  fail "NAME may contain only letters, numbers, dot, underscore, and hyphen"
+
+repository_root=$(git rev-parse --show-toplevel) || fail "not in a Git repository"
+cd "${repository_root}"
+output=${2:-config/versions/${name}.conf}
+[[ ! -e "${output}" ]] || fail "refusing to replace existing profile: ${output}"
+
+for submodule in DART E3SM; do
+  git -C "${submodule}" rev-parse --git-dir >/dev/null 2>&1 || \
+    fail "${submodule} submodule is not initialized"
+  [[ -z "$(git -C "${submodule}" status --porcelain)" ]] || \
+    fail "${submodule} contains local changes"
+done
+
+dart_url=$(git config -f .gitmodules --get submodule.DART.url) || \
+  fail "DART URL is missing from .gitmodules"
+dart_ref=$(git config -f .gitmodules --get submodule.DART.branch) || \
+  fail "DART branch is missing from .gitmodules"
+e3sm_url=$(git config -f .gitmodules --get submodule.E3SM.url) || \
+  fail "E3SM URL is missing from .gitmodules"
+e3sm_ref=$(git config -f .gitmodules --get submodule.E3SM.branch) || \
+  fail "E3SM branch is missing from .gitmodules"
+dart_sha=$(git -C DART rev-parse HEAD)
+e3sm_sha=$(git -C E3SM rev-parse HEAD)
+
+output_dir=$(dirname -- "${output}")
+mkdir -p -- "${output_dir}"
+temporary=$(mktemp "${output_dir}/.version-profile.XXXXXX")
+trap 'rm -f -- "${temporary}"' EXIT
+{
+  printf '# Generated from the current submodule checkouts.\n'
+  printf '# Confirm the refs and URLs before committing this profile.\n'
+  printf 'PROFILE_FORMAT=1\n'
+  printf 'PROFILE_NAME=%s\n\n' "${name}"
+  printf 'DART_URL=%s\n' "${dart_url}"
+  printf 'DART_REF=%s\n' "${dart_ref}"
+  printf 'DART_SHA=%s\n\n' "${dart_sha}"
+  printf 'E3SM_URL=%s\n' "${e3sm_url}"
+  printf 'E3SM_REF=%s\n' "${e3sm_ref}"
+  printf 'E3SM_SHA=%s\n' "${e3sm_sha}"
+} > "${temporary}"
+chmod 644 "${temporary}"
+mv -- "${temporary}" "${output}"
+trap - EXIT
+
+printf 'Created version profile %s\n' "${output}"

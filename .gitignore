@@ -11,6 +11,10 @@
 .DS_Store
 Gemfile.lock
 _site/
+
+# Local workflow settings and generated runtime state
+config/local.sh
+scripts/*/runtmp/
 .cppdefs
 
 # ROMS_rutgers compile time selection
@@ -299,4 +303,3 @@ test_perturb
 !restart_file_tool/
 !system_simulation/
 !wakeup_filter/
-

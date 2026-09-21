@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+fail() {
+  printf 'TEST FAILURE: %s\n' "$*" >&2
+  exit 1
+}
+
+repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+source "${repository_root}/tools/version-profile-lib.sh"
+temporary_dir=$(mktemp -d /tmp/e3sm-dart-version-tests.XXXXXX)
+trap 'rm -rf -- "${temporary_dir}"' EXIT
+
+valid_profile=${temporary_dir}/valid.conf
+cat > "${valid_profile}" <<'EOF'
+# Comments and surrounding whitespace are supported.
+ PROFILE_FORMAT=1
+PROFILE_NAME=test-profile
+DART_URL=https://example.test/DART.git
+DART_REF=main
+DART_SHA=1111111111111111111111111111111111111111
+E3SM_URL=https://example.test/E3SM.git
+E3SM_REF=maint-3.0
+E3SM_SHA=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+EOF
+load_profile "${valid_profile}"
+[[ "${PROFILE_NAME}" == test-profile ]] || fail "valid profile name was not parsed"
+[[ "${E3SM_SHA}" == aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ]] || \
+  fail "commit SHA was not normalized to lowercase"
+
+malicious_marker=${temporary_dir}/must-not-exist
+malicious_profile=${temporary_dir}/malicious.conf
+cat > "${malicious_profile}" <<EOF
+PROFILE_FORMAT=1
+PROFILE_NAME=malicious
+DART_URL=https://example.test/DART.git
+DART_REF=main
+DART_SHA=1111111111111111111111111111111111111111
+E3SM_URL=https://example.test/E3SM.git
+E3SM_REF=maint-3.0
+E3SM_SHA=2222222222222222222222222222222222222222
+RUN_COMMAND=touch ${malicious_marker}
+EOF
+if load_profile "${malicious_profile}" >/dev/null 2>&1; then
+  fail "profile with an unknown command key was accepted"
+fi
+[[ ! -e "${malicious_marker}" ]] || fail "profile content was executed"
+
+duplicate_profile=${temporary_dir}/duplicate.conf
+cat > "${duplicate_profile}" <<'EOF'
+PROFILE_FORMAT=1
+PROFILE_FORMAT=1
+PROFILE_NAME=duplicate
+DART_URL=x
+DART_REF=x
+DART_SHA=1111111111111111111111111111111111111111
+E3SM_URL=x
+E3SM_REF=x
+E3SM_SHA=2222222222222222222222222222222222222222
+EOF
+if load_profile "${duplicate_profile}" >/dev/null 2>&1; then
+  fail "profile with a duplicate key was accepted"
+fi
+
+short_sha_profile=${temporary_dir}/short-sha.conf
+sed 's/1111111111111111111111111111111111111111/1111111/' \
+  "${valid_profile}" > "${short_sha_profile}"
+if load_profile "${short_sha_profile}" >/dev/null 2>&1; then
+  fail "profile with an abbreviated SHA was accepted"
+fi
+
+generated_profile=${temporary_dir}/generated.conf
+"${repository_root}/tools/create-version-profile" generated-test "${generated_profile}" >/dev/null
+load_profile "${generated_profile}"
+[[ "${DART_SHA}" == "$(git -C "${repository_root}/DART" rev-parse HEAD)" ]] || \
+  fail "generated DART SHA does not match checkout"
+[[ "${E3SM_SHA}" == "$(git -C "${repository_root}/E3SM" rev-parse HEAD)" ]] || \
+  fail "generated E3SM SHA does not match checkout"
+
+"${repository_root}/tools/checkout-version" --dry-run "${generated_profile}" >/dev/null
+printf 'All version-tool tests passed.\n'

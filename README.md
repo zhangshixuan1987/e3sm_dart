@@ -42,6 +42,38 @@ The configured submodule URLs and upstream branches are recorded in
 `.gitmodules`. The parent repository records the exact DART and E3SM commits
 used by this branch.
 
+## Reproducible dependency profiles
+
+The stable submodule paths are always `DART/` and `E3SM/`; dependency variants
+must not be encoded in directory names. Version profiles under
+`config/versions/` record a fetch URL, descriptive ref, and immutable full SHA
+for each dependency. Restore the baseline combination with:
+
+```bash
+tools/checkout-version baseline
+tools/validate-repository baseline
+```
+
+The checkout will leave the parent repository's submodule gitlinks modified if
+the selected profile differs from the combination recorded by the current
+parent commit. After validating a new combination, commit both gitlinks on an
+integration branch so a normal recursive clone reproduces it.
+
+Profiles are parsed as data rather than sourced as shell code. Preview a change
+with `tools/checkout-version --dry-run PROFILE`, generate a profile from the
+current clean checkouts with `tools/create-version-profile NAME`, and use
+`tools/validate-repository --require-recorded PROFILE` before a production run.
+The parent gitlinks—not profiles—remain authoritative for validated versions.
+See [`config/versions/README.md`](config/versions/README.md) for the complete
+candidate-to-validated workflow.
+
+Before starting an experiment, save its exact source provenance outside the
+source tree or in the experiment run directory:
+
+```bash
+tools/record-provenance /path/to/experiment/source-provenance.txt baseline
+```
+
 ## Getting Started
 
 ### Clone the repository

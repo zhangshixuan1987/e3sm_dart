@@ -106,9 +106,9 @@ restore_submodule() {
   local sha=$2
   local branch=$3
   if [[ -n "${branch}" ]]; then
-    git -C "${submodule}" switch "${branch}"
+    git -C "${submodule}" checkout "${branch}"
   else
-    git -C "${submodule}" switch --detach "${sha}"
+    git -C "${submodule}" checkout --detach "${sha}"
   fi
   git -C "${submodule}" submodule update --init --recursive
 }
@@ -126,8 +126,8 @@ rollback() {
 trap rollback ERR INT TERM
 
 checkout_started=true
-git -C DART switch --detach "${DART_SHA}"
-git -C E3SM switch --detach "${E3SM_SHA}"
+git -C DART checkout --detach "${DART_SHA}"
+git -C E3SM checkout --detach "${E3SM_SHA}"
 git -C DART submodule update --init --recursive
 git -C E3SM submodule update --init --recursive
 checkout_started=false

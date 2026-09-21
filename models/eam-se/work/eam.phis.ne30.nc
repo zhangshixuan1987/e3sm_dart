@@ -1,1 +1,1 @@
-../topo/eam.phis.ne30.nc
+../../topo/eam.phis.ne30.nc

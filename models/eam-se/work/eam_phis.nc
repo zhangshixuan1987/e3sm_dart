@@ -1,1 +1,1 @@
-../topo/eam_phis.nc
+../../topo/eam_phis.nc

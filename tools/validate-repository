@@ -65,20 +65,49 @@ for required in \
   [[ -e "${required}" ]] || error "required submodule file is missing: ${required}"
 done
 
-if git -C DART rev-parse --git-dir >/dev/null 2>&1; then
-  actual_dart_sha=$(git -C DART rev-parse HEAD)
+if (
+  cd "${repository_root}/DART" 2>/dev/null &&
+  git rev-parse --git-dir >/dev/null 2>&1
+); then
+
+  actual_dart_sha=$(
+    cd "${repository_root}/DART" || exit 1
+    git rev-parse HEAD
+  )
+
   [[ "${actual_dart_sha}" == "${DART_SHA}" ]] || \
     error "DART is ${actual_dart_sha}; profile ${PROFILE_NAME} requires ${DART_SHA}"
-  [[ -z "$(git -C DART status --porcelain)" ]] || error "DART contains local changes"
+
+  [[ -z "$(
+    cd "${repository_root}/DART" || exit 1
+    git status --porcelain
+  )" ]] || \
+    error "DART contains local changes"
+
 else
   error "DART submodule is not initialized"
 fi
 
-if git -C E3SM rev-parse --git-dir >/dev/null 2>&1; then
-  actual_e3sm_sha=$(git -C E3SM rev-parse HEAD)
+
+if (
+  cd "${repository_root}/E3SM" 2>/dev/null &&
+  git rev-parse --git-dir >/dev/null 2>&1
+); then
+
+  actual_e3sm_sha=$(
+    cd "${repository_root}/E3SM" || exit 1
+    git rev-parse HEAD
+  )
+
   [[ "${actual_e3sm_sha}" == "${E3SM_SHA}" ]] || \
     error "E3SM is ${actual_e3sm_sha}; profile ${PROFILE_NAME} requires ${E3SM_SHA}"
-  [[ -z "$(git -C E3SM status --porcelain)" ]] || error "E3SM contains local changes"
+
+  [[ -z "$(
+    cd "${repository_root}/E3SM" || exit 1
+    git status --porcelain
+  )" ]] || \
+    error "E3SM contains local changes"
+
 else
   error "E3SM submodule is not initialized"
 fi

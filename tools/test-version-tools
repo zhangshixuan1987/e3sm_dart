@@ -71,11 +71,21 @@ if load_profile "${short_sha_profile}" >/dev/null 2>&1; then
 fi
 
 generated_profile=${temporary_dir}/generated.conf
+
 "${repository_root}/tools/create-version-profile" generated-test "${generated_profile}" >/dev/null
+
 load_profile "${generated_profile}"
-[[ "${DART_SHA}" == "$(git -C "${repository_root}/DART" rev-parse HEAD)" ]] || \
+
+[[ "${DART_SHA}" == "$(
+  cd "${repository_root}/DART" || exit 1
+  git rev-parse HEAD
+)" ]] || \
   fail "generated DART SHA does not match checkout"
-[[ "${E3SM_SHA}" == "$(git -C "${repository_root}/E3SM" rev-parse HEAD)" ]] || \
+
+[[ "${E3SM_SHA}" == "$(
+  cd "${repository_root}/E3SM" || exit 1
+  git rev-parse HEAD
+)" ]] || \
   fail "generated E3SM SHA does not match checkout"
 
 "${repository_root}/tools/checkout-version" --dry-run "${generated_profile}" >/dev/null

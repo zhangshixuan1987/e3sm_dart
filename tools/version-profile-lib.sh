@@ -90,5 +90,9 @@ load_profile() {
 submodule_recorded_sha() {
   local repository_root=$1
   local submodule=$2
-  git -C "${repository_root}" ls-tree HEAD -- "${submodule}" | awk '{print $3}'
+
+  (
+    cd "${repository_root}" || exit 1
+    git ls-tree HEAD -- "${submodule}"
+  ) | awk '{print $3}'
 }

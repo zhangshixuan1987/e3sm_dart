@@ -52,8 +52,26 @@ cd "${repository_root}"
 
 current_dart=uninitialized
 current_e3sm=uninitialized
-git -C DART rev-parse --git-dir >/dev/null 2>&1 && current_dart=$(git -C DART rev-parse HEAD)
-git -C E3SM rev-parse --git-dir >/dev/null 2>&1 && current_e3sm=$(git -C E3SM rev-parse HEAD)
+
+if (
+  cd DART 2>/dev/null &&
+  git rev-parse --git-dir >/dev/null 2>&1
+); then
+  current_dart=$(
+    cd DART || exit 1
+    git rev-parse HEAD
+  )
+fi
+
+if (
+  cd E3SM 2>/dev/null &&
+  git rev-parse --git-dir >/dev/null 2>&1
+); then
+  current_e3sm=$(
+    cd E3SM || exit 1
+    git rev-parse HEAD
+  )
+fi
 
 printf 'Profile: %s (%s)\n' "${PROFILE_NAME}" "${profile_file}"
 printf '  DART %s -> %s\n' "${current_dart}" "${DART_SHA}"
@@ -64,53 +82,108 @@ if [[ "${dry_run}" == true ]]; then
 fi
 
 for submodule in DART E3SM; do
-  if ! git -C "${submodule}" rev-parse --git-dir >/dev/null 2>&1; then
+  if ! (
+    cd "${submodule}" 2>/dev/null &&
+    git rev-parse --git-dir >/dev/null 2>&1
+  ); then
     git submodule update --init "${submodule}"
   fi
 done
 
 for submodule in DART E3SM; do
-  [[ -z "$(git -C "${submodule}" status --porcelain)" ]] || \
+  if ! (
+    cd "${submodule}" || exit 1
+    [[ -z "$(git status --porcelain)" ]]
+  ); then
     fail "${submodule} contains local changes; save or discard them first"
+  fi
 done
 
 if [[ "${fetch}" == true ]]; then
+
   printf 'Fetching DART ref %s from %s\n' "${DART_REF}" "${DART_URL}"
-  git -C DART fetch --no-tags "${DART_URL}" "${DART_REF}"
-  git -C DART cat-file -e "${DART_SHA}^{commit}" || \
-    fail "DART commit is unavailable after fetch: ${DART_SHA}"
-  git -C DART merge-base --is-ancestor "${DART_SHA}" FETCH_HEAD || \
-    fail "DART commit ${DART_SHA} is not reachable from fetched ref ${DART_REF}"
+
+  (
+    cd DART || exit 1
+
+    git fetch --no-tags "${DART_URL}" "${DART_REF}" || exit 1
+
+    git cat-file -e "${DART_SHA}^{commit}" || \
+      fail "DART commit is unavailable after fetch: ${DART_SHA}"
+
+    git merge-base --is-ancestor "${DART_SHA}" FETCH_HEAD || \
+      fail "DART commit ${DART_SHA} is not reachable from fetched ref ${DART_REF}"
+  ) || exit 1
+
 
   printf 'Fetching E3SM ref %s from %s\n' "${E3SM_REF}" "${E3SM_URL}"
-  git -C E3SM fetch --no-tags "${E3SM_URL}" "${E3SM_REF}"
-  git -C E3SM cat-file -e "${E3SM_SHA}^{commit}" || \
-    fail "E3SM commit is unavailable after fetch: ${E3SM_SHA}"
-  git -C E3SM merge-base --is-ancestor "${E3SM_SHA}" FETCH_HEAD || \
-    fail "E3SM commit ${E3SM_SHA} is not reachable from fetched ref ${E3SM_REF}"
+
+  (
+    cd E3SM || exit 1
+
+    git fetch --no-tags "${E3SM_URL}" "${E3SM_REF}" || exit 1
+
+    git cat-file -e "${E3SM_SHA}^{commit}" || \
+      fail "E3SM commit is unavailable after fetch: ${E3SM_SHA}"
+
+    git merge-base --is-ancestor "${E3SM_SHA}" FETCH_HEAD || \
+      fail "E3SM commit ${E3SM_SHA} is not reachable from fetched ref ${E3SM_REF}"
+  ) || exit 1
+
 else
-  git -C DART cat-file -e "${DART_SHA}^{commit}" || \
-    fail "DART commit is not available locally: ${DART_SHA}"
-  git -C E3SM cat-file -e "${E3SM_SHA}^{commit}" || \
-    fail "E3SM commit is not available locally: ${E3SM_SHA}"
+
+  (
+    cd DART || exit 1
+    git cat-file -e "${DART_SHA}^{commit}"
+  ) || fail "DART commit is not available locally: ${DART_SHA}"
+
+  (
+    cd E3SM || exit 1
+    git cat-file -e "${E3SM_SHA}^{commit}"
+  ) || fail "E3SM commit is not available locally: ${E3SM_SHA}"
+
 fi
 
-original_dart_sha=$(git -C DART rev-parse HEAD)
-original_e3sm_sha=$(git -C E3SM rev-parse HEAD)
-original_dart_branch=$(git -C DART symbolic-ref --quiet --short HEAD || true)
-original_e3sm_branch=$(git -C E3SM symbolic-ref --quiet --short HEAD || true)
+
+original_dart_sha=$(
+  cd DART || exit 1
+  git rev-parse HEAD
+) || fail "Unable to determine current DART commit"
+
+original_e3sm_sha=$(
+  cd E3SM || exit 1
+  git rev-parse HEAD
+) || fail "Unable to determine current E3SM commit"
+
+
+original_dart_branch=$(
+  cd DART || exit 1
+  git symbolic-ref --quiet --short HEAD || true
+)
+
+original_e3sm_branch=$(
+  cd E3SM || exit 1
+  git symbolic-ref --quiet --short HEAD || true
+)
+
 checkout_started=false
 
 restore_submodule() {
   local submodule=$1
   local sha=$2
   local branch=$3
-  if [[ -n "${branch}" ]]; then
-    git -C "${submodule}" checkout "${branch}"
-  else
-    git -C "${submodule}" checkout --detach "${sha}"
-  fi
-  git -C "${submodule}" submodule update --init --recursive
+
+  (
+    cd "${submodule}" || exit 1
+
+    if [[ -n "${branch}" ]]; then
+      git checkout "${branch}"
+    else
+      git checkout --detach "${sha}"
+    fi
+
+    git submodule update --init --recursive
+  )
 }
 
 rollback() {
@@ -126,14 +199,33 @@ rollback() {
 trap rollback ERR INT TERM
 
 checkout_started=true
-git -C DART checkout --detach "${DART_SHA}"
-git -C E3SM checkout --detach "${E3SM_SHA}"
-git -C DART submodule update --init --recursive
-git -C E3SM submodule update --init --recursive
+
+(
+  cd DART || exit 1
+  git checkout "${DART_SHA}"
+  git submodule update --init --recursive
+)
+
+(
+  cd E3SM || exit 1
+  git checkout "${E3SM_SHA}"
+  git submodule update --init --recursive
+)
+
 checkout_started=false
+
 trap - ERR INT TERM
 
 printf 'Checked out profile %s\n' "${PROFILE_NAME}"
-printf '  DART %s\n' "$(git -C DART rev-parse HEAD)"
-printf '  E3SM %s\n' "$(git -C E3SM rev-parse HEAD)"
+
+printf '  DART %s\n' "$(
+  cd DART || exit 1
+  git rev-parse HEAD
+)"
+
+printf '  E3SM %s\n' "$(
+  cd E3SM || exit 1
+  git rev-parse HEAD
+)"
+
 printf 'Run tools/validate-repository %q to validate this checkout.\n' "${profile}"

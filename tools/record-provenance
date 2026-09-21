@@ -30,30 +30,70 @@ temporary=$(mktemp "${output_dir}/.provenance.XXXXXX")
 trap 'rm -f -- "${temporary}"' EXIT
 
 repository_dirty=false
-[[ -z "$(git -C "${repository_root}" status --porcelain --ignore-submodules=none)" ]] || \
-  repository_dirty=true
+
+repository_status="$(
+  cd "${repository_root}" || exit 1
+  git status --porcelain --ignore-submodules=none
+)" || exit 1
+
+[[ -z "${repository_status}" ]] || repository_dirty=true
 
 {
   printf 'format=1\n'
   printf 'recorded_at_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf 'profile=%s\n' "${PROFILE_NAME}"
   printf 'profile_file=%s\n' "${profile_file#"${repository_root}/"}"
+
   printf 'dart_url=%s\n' "${DART_URL}"
   printf 'dart_ref=%s\n' "${DART_REF}"
+
   printf 'e3sm_url=%s\n' "${E3SM_URL}"
   printf 'e3sm_ref=%s\n' "${E3SM_REF}"
-  printf 'repository_url=%s\n' "$(git -C "${repository_root}" remote get-url origin 2>/dev/null || printf unknown)"
-  printf 'repository_branch=%s\n' "$(git -C "${repository_root}" branch --show-current || true)"
-  printf 'repository_sha=%s\n' "$(git -C "${repository_root}" rev-parse HEAD)"
+
+  printf 'repository_url=%s\n' "$(
+    cd "${repository_root}" || exit 1
+    git config --get remote.origin.url 2>/dev/null || printf 'unknown'
+  )"
+
+  printf 'repository_branch=%s\n' "$(
+    cd "${repository_root}" || exit 1
+    git symbolic-ref --quiet --short HEAD 2>/dev/null || true
+  )"
+
+  printf 'repository_sha=%s\n' "$(
+    cd "${repository_root}" || exit 1
+    git rev-parse HEAD
+  )"
+
   printf 'repository_dirty=%s\n' "${repository_dirty}"
-  printf 'recorded_dart_sha=%s\n' "$(submodule_recorded_sha "${repository_root}" DART)"
-  printf 'recorded_e3sm_sha=%s\n' "$(submodule_recorded_sha "${repository_root}" E3SM)"
-  printf 'dart_sha=%s\n' "$(git -C "${repository_root}/DART" rev-parse HEAD)"
-  printf 'e3sm_sha=%s\n' "$(git -C "${repository_root}/E3SM" rev-parse HEAD)"
+
+  printf 'recorded_dart_sha=%s\n' "$(
+    submodule_recorded_sha "${repository_root}" DART
+  )"
+
+  printf 'recorded_e3sm_sha=%s\n' "$(
+    submodule_recorded_sha "${repository_root}" E3SM
+  )"
+
+  printf 'dart_sha=%s\n' "$(
+    cd "${repository_root}/DART" || exit 1
+    git rev-parse HEAD
+  )"
+
+  printf 'e3sm_sha=%s\n' "$(
+    cd "${repository_root}/E3SM" || exit 1
+    git rev-parse HEAD
+  )"
+
   printf 'hostname=%s\n' "$(hostname)"
+
   printf 'submodules_begin\n'
-  git -C "${repository_root}" submodule status --recursive
+  (
+    cd "${repository_root}" || exit 1
+    git submodule status --recursive
+  )
   printf 'submodules_end\n'
+
 } > "${temporary}"
 
 mv -- "${temporary}" "${output}"

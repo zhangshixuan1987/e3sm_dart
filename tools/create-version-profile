@@ -33,10 +33,13 @@ output=${2:-config/versions/${name}.conf}
 [[ ! -e "${output}" ]] || fail "refusing to replace existing profile: ${output}"
 
 for submodule in DART E3SM; do
-  git -C "${submodule}" rev-parse --git-dir >/dev/null 2>&1 || \
+
+  git_in "${submodule}" rev-parse --git-dir >/dev/null 2>&1 || \
     fail "${submodule} submodule is not initialized"
-  [[ -z "$(git -C "${submodule}" status --porcelain)" ]] || \
+
+  [[ -z "$(git_in "${submodule}" status --porcelain)" ]] || \
     fail "${submodule} contains local changes"
+
 done
 
 dart_url=$(git config -f .gitmodules --get submodule.DART.url) || \
@@ -47,8 +50,16 @@ e3sm_url=$(git config -f .gitmodules --get submodule.E3SM.url) || \
   fail "E3SM URL is missing from .gitmodules"
 e3sm_ref=$(git config -f .gitmodules --get submodule.E3SM.branch) || \
   fail "E3SM branch is missing from .gitmodules"
-dart_sha=$(git -C DART rev-parse HEAD)
-e3sm_sha=$(git -C E3SM rev-parse HEAD)
+
+dart_sha=$(
+  cd DART || exit 1
+  git rev-parse HEAD
+)
+
+e3sm_sha=$(
+  cd E3SM || exit 1
+  git rev-parse HEAD
+)
 
 output_dir=$(dirname -- "${output}")
 mkdir -p -- "${output_dir}"

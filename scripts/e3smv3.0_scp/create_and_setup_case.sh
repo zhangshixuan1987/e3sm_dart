@@ -170,6 +170,11 @@ export my_elm_history_stream="h1"
 export my_elm_vector_history_stream="h2"
 declare -Ag my_elm_dart_cycle_overrides=(
 )
+# Step 3 perturbs these ELM restart variables (soil levels only) for the initial
+# ensemble. Each entry is VARIABLE:rel|abs:AMPLITUDE, a Gaussian standard deviation:
+# rel = fraction of the value (kept >= 0), abs = native units. Empty = no ELM perturbation.
+export my_elm_perturb_specs="H2OSOI_LIQ:rel:0.05 H2OSOI_ICE:rel:0.05 T_SOISNO:abs:0.5"
+export my_elm_perturb_seed=20111101
 
 ################################################################################
 # --- Strongly coupled DA setup ----------------------------------------------
@@ -197,7 +202,8 @@ export atm_da_obs_model="Atmosphere"
 
 export lnd_da_output_sequential_prior_post=".false."
 export lnd_da_use_sequential_prior_post=".false."
-export lnd_da_perturb_from_single_instance=".true."
+# .false.: keep the forecast land ensemble; Step 3 creates the initial land spread.
+export lnd_da_perturb_from_single_instance=".false."
 export lnd_da_perturbation_amplitude="0.2"
 export lnd_da_perturbation_method="uniform"
 export lnd_da_obs_sequence_in_name="obs_seq.out"

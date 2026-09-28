@@ -237,6 +237,16 @@ runtmp/status/perturb_complete.<valid-time>
 
 An archive-level `.dart_perturb_in_progress` marker protects partially perturbed ensembles.
 
+When ELM DA is on and `my_elm_perturb_specs` is set, Step 3 also perturbs each
+member's ELM restart after the EAM perturbation succeeds, using
+`workflow_lib/perturb/elm_perturb_restart.py` with the E3SM-Unified environment.
+Each entry is `VARIABLE:rel|abs:AMPLITUDE` (a Gaussian standard deviation;
+`rel` is a fraction of the value and keeps it non-negative, `abs` is in native
+units). Only soil levels change: snow layers, fill values and zeros are left as
+they are, so the snow state stays consistent. The random stream depends on
+`my_elm_perturb_seed`, the member and the variable, so reruns are reproducible.
+The default perturbs `H2OSOI_LIQ` and `H2OSOI_ICE` by 5% and `T_SOISNO` by 0.5 K.
+
 ### Step 4 — Coupled cycling DA
 
 ```bash

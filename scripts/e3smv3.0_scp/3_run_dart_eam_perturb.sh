@@ -95,6 +95,21 @@ done
 perturb_status="${my_status_dir}/perturb_complete.${my_refdate}-${my_reftod}"
 rm -f -- "${perturb_status}"
 
+# ELM restarts are perturbed too when ELM DA is on and my_elm_perturb_specs is set.
+PERTURB_ELM=FALSE
+if [[ "${my_elm_dart_da,,}" == "on" && -n "${my_elm_perturb_specs:-}" ]]; then
+   PERTURB_ELM=TRUE
+   [[ "${my_elm_perturb_seed:-}" =~ ^[0-9]+$ ]] || fail "my_elm_perturb_seed must be a non-negative integer"
+   for spec in ${my_elm_perturb_specs}; do
+      [[ "${spec}" =~ ^[A-Za-z0-9_]+:(rel|abs):[0-9]*\.?[0-9]+$ ]] || fail "invalid my_elm_perturb_specs entry: ${spec} (expected VARIABLE:rel|abs:AMPLITUDE)"
+   done
+   for i in $(seq 1 "${my_ensnum}"); do
+      ENSTR=$(printf 'EN%02d' "${i}")
+      elm_restart="${my_modeldir}/${ENSTR}/archive/rest/${my_refdate}-${my_reftod}/${my_casename}.${ENSTR}.elm.r.${my_refdate}-${my_reftod}.nc"
+      [[ -s "${elm_restart}" ]] || fail "missing ELM restart for ${ENSTR}; rerun Step 2: ${elm_restart}"
+   done
+fi
+
 # DART (Intel Fortran) keeps large per-task work arrays on the stack; the default
 # 8 MB limit makes filter crash with SIGSEGV. srun passes this limit to every task.
 ulimit -s unlimited 2>/dev/null || {
@@ -962,6 +977,28 @@ fi
 # Then this script will need to feed the files in output_restart_list_file
 # to the next model advance.
 # This gets the .i. or .r. piece from the EAM-SE format file name.
+
+# Perturb the ELM restarts while the in-progress markers are still set, so an
+# interrupted run sends the user back to Step 2 for clean restarts.
+if [[ "${PERTURB_ELM}" == "TRUE" ]]; then
+   echo "`date` -- BEGIN ELM RESTART PERTURBATION (${my_elm_perturb_specs})"
+   source "${my_workflow_lib:?}/common/analysis_env.sh"
+   (
+      load_analysis_env >/dev/null || exit 1
+      for i in $(seq 1 "${my_ensnum}"); do
+         ENSTR=$(printf 'EN%02d' "${i}")
+         elm_restart="${my_modeldir}/${ENSTR}/archive/rest/${my_refdate}-${my_reftod}/${my_casename}.${ENSTR}.elm.r.${my_refdate}-${my_reftod}.nc"
+         python3 "${my_workflow_lib}/perturb/elm_perturb_restart.py" "${elm_restart}" \
+            --member "${i}" --seed "${my_elm_perturb_seed}" ${my_elm_perturb_specs} || exit 1
+      done
+   ) || fail "ELM restart perturbation failed; rerun Step 2 before retrying Step 3"
+   for i in $(seq 1 "${my_ensnum}"); do
+      ENSTR=$(printf 'EN%02d' "${i}")
+      elm_restart="${my_modeldir}/${ENSTR}/archive/rest/${my_refdate}-${my_reftod}/${my_casename}.${ENSTR}.elm.r.${my_refdate}-${my_reftod}.nc"
+      ncdump -h "${elm_restart}" >/dev/null 2>&1 || fail "invalid perturbed ELM restart for ${ENSTR}: ${elm_restart}"
+   done
+   echo "`date` -- END ELM RESTART PERTURBATION"
+fi
 
 # Step 3 is complete only after filter output validation and all diagnostic
 # post-processing have succeeded.

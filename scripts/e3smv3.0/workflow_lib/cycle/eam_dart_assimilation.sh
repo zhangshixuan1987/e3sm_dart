@@ -68,7 +68,7 @@ case ${my_machine} in
                 LINKV=TRUE
                 LIST='/usr/bin/ls'
                 REMOVE='/usr/bin/rm'
-                LAUNCHCMD=mpirun.lsf
+                LAUNCHCMD="srun --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu-bind=cores -c 2 -m plane=${my_task_per_node}"
                 ;;
          *)
                 VERBOSE='-v'

@@ -318,8 +318,13 @@ ln -s elm_history_0001.nc elm_history.nc || return 1
 
 ELM_DART_NTASKS=$((my_elm_dart_nnodes * my_task_per_node))
 echo "$(date) -- BEGIN ELM FILTER (${my_elm_dart_nnodes} nodes, ${ELM_DART_NTASKS} tasks)"
+if [[ "${my_machine}" == "pm-cpu" ]]; then
+  ELM_SRUN_BIND=(--kill-on-bad-exit -l --cpu-bind=cores -c 2)
+else
+  ELM_SRUN_BIND=(--mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1)
+fi
 srun --exclusive --nodes="${my_elm_dart_nnodes}" --ntasks="${ELM_DART_NTASKS}" \
-  --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane="${my_task_per_node}" ./filter \
+  "${ELM_SRUN_BIND[@]}" -m plane="${my_task_per_node}" ./filter \
   || elm_fail "filter failed for ${ELM_STAMP}" || return 1
 echo "$(date) -- END ELM FILTER"
 rm -f elm_restart.nc elm_history.nc elm_vector_history.nc || return 1

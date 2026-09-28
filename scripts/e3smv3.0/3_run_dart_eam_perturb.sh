@@ -2,11 +2,12 @@
 #------------------------------------------------------------------------------
 # Batch system directives
 #------------------------------------------------------------------------------
-#SBATCH  --account=esmd
+#SBATCH  --account=m4849
 #SBATCH  --time=00:30:00
-#SBATCH  --partition=short
+#SBATCH  --constraint=cpu
+#SBATCH  --qos=debug
 #SBATCH  --job-name=e3sm_dart_ensda_pert
-#SBATCH  --nodes=20
+#SBATCH  --nodes=4
 #SBATCH  --output=e3sm_dart_ensda_pert.%j
 
 fail() {
@@ -173,7 +174,7 @@ case ${my_machine} in
                 LINKV=TRUE
                 LIST='/usr/bin/ls'
                 REMOVE='/usr/bin/rm'
-                LAUNCHCMD=mpirun.lsf
+                LAUNCHCMD="srun --nodes=${REQUEST_NODES} --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu-bind=cores -c 2 -m plane=${my_task_per_node}"
                 ;;
          *)
                 VERBOSE='-v'

@@ -356,6 +356,8 @@ EOF
 # =====================================
 
 patch_mpas_streams() {
+local din
+din=$(cd ${CASE_SCRIPTS_DIR} && ./xmlquery DIN_LOC_ROOT --value)
 
 echo
 echo 'Modifying MPAS streams files'
@@ -366,7 +368,7 @@ patch streams.ocean << EOF
 --- streams.ocean
 +++ streams.ocean
 @@ -12,1 +12,1 @@
--                  filename_template="/compyfs/inputdata/ocn/mpas-o/IcoswISC30E3r5/mpaso.IcoswISC30E3r5.rstFromG-chrysalis.20231121.nc"
+-                  filename_template="${din}/ocn/mpas-o/IcoswISC30E3r5/mpaso.IcoswISC30E3r5.rstFromG-chrysalis.20231121.nc"
 +                  filename_template="${ocn_init}"
 EOF
 
@@ -375,10 +377,10 @@ patch streams.seaice << EOF
 --- streams.seaice
 +++ streams.seaice
 @@ -11,1 +11,1 @@
--                  filename_template="/compyfs/inputdata/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.rstFromG-chrysalis.20231121.nc"
+-                  filename_template="${din}/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.rstFromG-chrysalis.20231121.nc"
 +                  filename_template="${ice_init}"
 @@ -38,1 +38,1 @@
--                  filename_template="/compyfs/inputdata/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.rstFromG-chrysalis.20231121.nc"
+-                  filename_template="${din}/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.rstFromG-chrysalis.20231121.nc"
 +                  filename_template="${ice_init}"
 EOF
 

@@ -3,11 +3,12 @@
 # Multi-cycle Slurm driver. With my_cycles_per_job=1 this preserves the
 # original one-cycle-per-job behavior.
 #------------------------------------------------------------------------------
-#SBATCH --account=esmd
-#SBATCH --time=24:00:00
-#SBATCH --partition=slurm
+#SBATCH --account=m4849
+#SBATCH --time=03:00:00
+#SBATCH --constraint=cpu
+#SBATCH --qos=regular
 #SBATCH --job-name=e3sm_dart_ensda_cyc
-#SBATCH --nodes=160
+#SBATCH --nodes=16
 #SBATCH --output=runtmp/logs/e3sm_dart_ensda_cyc.%j
 #SBATCH --exclusive
 #SBATCH --no-kill

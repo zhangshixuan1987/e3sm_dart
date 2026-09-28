@@ -335,6 +335,8 @@ EOF
 # =====================================
 
 patch_mpas_streams() {
+local din
+din=$(cd ${CASE_SCRIPTS_DIR} && ./xmlquery DIN_LOC_ROOT --value)
 echo
 echo 'Modifying MPAS streams files'
 pushd ${CASE_RUN_DIR}
@@ -343,7 +345,7 @@ patch streams.seaice << EOF
 --- streams.seaice
 +++ streams.seaice
 @@ -11,1 +11,1 @@
--                  filename_template="/compyfs/inputdata/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.20231120.nc"
+-                  filename_template="${din}/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.20231120.nc"
 +                  filename_template="${ice_init}"
 @@ -34,1 +34,8 @@
 -

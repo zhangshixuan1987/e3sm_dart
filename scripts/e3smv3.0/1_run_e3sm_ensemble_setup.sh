@@ -6,9 +6,10 @@
 #SBATCH  --nodes=1
 #SBATCH  --output=e3sm_dart_ensda_setup.%j
 #SBATCH  --exclusive
-#SBATCH  --account=esmd
+#SBATCH  --account=m4849
 #SBATCH  --time=02:00:00
-#SBATCH  --qos=short
+#SBATCH  --constraint=cpu
+#SBATCH  --qos=regular
 
 set -Eeuo pipefail
 #source /share/apps/E3SM/conda_envs/load_latest_e3sm_unified_compy.sh

@@ -9,9 +9,10 @@
 #SBATCH  --nodes=1
 #SBATCH  --output=e3sm_dart_ensda_init.%j
 #SBATCH  --exclusive
-#SBATCH  --account=esmd
-#SBATCH  --time=02:00:00
-#SBATCH  --qos=short
+#SBATCH  --account=m4849
+#SBATCH  --time=00:30:00
+#SBATCH  --constraint=cpu
+#SBATCH  --qos=debug
 
 fail() {
   echo "ERROR: $*"

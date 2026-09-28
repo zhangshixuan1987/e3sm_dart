@@ -18,6 +18,7 @@ programs=(
 filter
 model_mod_check
 perfect_model_obs
+perturb_single_instance
 )
 
 serial_programs=(

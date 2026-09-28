@@ -88,7 +88,10 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                                   map_pe_to_task, &
                                   get_var_owner_index, &
                                   all_copies_to_all_vars, &
-                                  all_vars_to_all_copies
+                                  all_vars_to_all_copies, &
+                                  get_my_num_vars, get_my_vars
+
+use       random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
 use distributed_state_mod, only : get_state
 
@@ -99,7 +102,8 @@ use   state_structure_mod, only : add_domain, state_structure_info,   &
                                   get_dim_length, get_variable_name,  &
                                   do_io_update, get_variable_size,    &
                                   get_model_variable_indices,         &
-                                  get_domain_size, get_varid_from_kind
+                                  get_domain_size, get_varid_from_kind, &
+                                  get_varid_from_varname
 
 use obs_def_utilities_mod, only : track_status
 
@@ -232,6 +236,19 @@ character(len=256) :: elm_vector_history_filename = 'elm_vector_history.nc'
 
 character(len=obstypelength) :: elm_variables(max_state_variables*num_state_table_columns) = ' '
 
+! Initial-ensemble perturbation (used by pert_model_copies when filter or
+! perturb_single_instance creates an ensemble from one member). Only restart
+! variables listed in fields_to_perturb change. perturbation_type is
+! 'relative' (standard deviation = amplitude * value; positive values only,
+! results kept >= 0) or 'absolute' (standard deviation = amplitude, native
+! units; nonzero values only). Fill and missing values are never changed.
+logical                      :: custom_routine_to_generate_ensemble = .false.
+character(len=obstypelength) :: fields_to_perturb(max_state_variables) = ' '
+real(r8)                     :: perturbation_amplitude(max_state_variables) = 0.0_r8
+character(len=16)            :: perturbation_type(max_state_variables) = 'relative'
+logical                      :: perturb_soil_levels_only = .true.          ! skip snow layers of levtot
+logical                      :: perturb_natural_crop_columns_only = .true. ! vegetated/bare soil and crop columns
+
 namelist /model_nml/            &
    elm_restart_filename,        &
    elm_history_filename,        &
@@ -240,7 +257,13 @@ namelist /model_nml/            &
    assimilation_period_seconds, &
    calendar,                    &
    debug,                       &
-   elm_variables
+   elm_variables,               &
+   custom_routine_to_generate_ensemble, &
+   fields_to_perturb,           &
+   perturbation_amplitude,      &
+   perturbation_type,           &
+   perturb_soil_levels_only,    &
+   perturb_natural_crop_columns_only
 
 !----------------------------------------------------------------------
 ! how many and which columns are in each gridcell
@@ -1036,17 +1059,117 @@ integer,             intent(in)    :: ens_size
 real(r8),            intent(in)    :: pert_amp
 logical,             intent(out)   :: interf_provided
 
+character(len=*), parameter :: routine = 'pert_model_copies'
+
+type(random_seq_type) :: seq
+integer(i8), allocatable :: my_vars(:)
+integer(i8) :: i, state_items
+integer :: nfields, ifield, ivar, idim, nvars, j
+integer :: iloc, jloc, kloc, var_id, dom_id, col, lev, ltype
+integer :: loc(3)
+integer, allocatable :: field_of_var(:), col_dim(:), lev_dim(:)
+logical,  allocatable :: relative(:)
+real(r8) :: x, amp
+
 if ( .not. module_initialized ) call static_init_model
 
-call error_handler(E_WARN,'pert_model_copies', &
-                  'ELM cannot be started from a single vector', &
-                  source, &
-                  text2='see comments in elm/model_mod.f90::pert_model_copies()')
+if (.not. custom_routine_to_generate_ensemble) then
+   call error_handler(E_WARN, routine, &
+                     'ELM cannot be started from a single vector', source, &
+                     text2='set custom_routine_to_generate_ensemble and fields_to_perturb in model_nml')
+   interf_provided = .false.
+   return
+endif
+interf_provided = .true.
 
-! Should provide a minimal pert routine that only perturbs some variables on columns
-! or pfts that we like ... 'vegetated or bare ground, crop' ... but not lake, glacier, etc.
+if (dom_restart < 0) call error_handler(E_ERR, routine, &
+   'fields_to_perturb need restart variables, but elm_variables lists none', source)
 
-interf_provided = .false.
+! Map every restart-domain variable to its entry in fields_to_perturb and
+! record which of its dimensions are the column and the levtot level.
+nvars = get_num_variables(dom_restart)
+allocate(field_of_var(nvars), col_dim(nvars), lev_dim(nvars), relative(max_state_variables))
+field_of_var = 0
+col_dim      = 0
+lev_dim      = 0
+nfields      = 0
+do ifield = 1, max_state_variables
+   if (fields_to_perturb(ifield) == ' ') exit
+   nfields = ifield
+   ivar = get_varid_from_varname(dom_restart, fields_to_perturb(ifield))
+   if (ivar < 1) then
+      string1 = 'fields_to_perturb entry "'//trim(fields_to_perturb(ifield))// &
+                '" is not a restart variable in elm_variables'
+      call error_handler(E_ERR, routine, string1, source)
+   endif
+   if (perturbation_amplitude(ifield) <= 0.0_r8) then
+      string1 = 'perturbation_amplitude must be > 0 for "'//trim(fields_to_perturb(ifield))//'"'
+      call error_handler(E_ERR, routine, string1, source)
+   endif
+   select case (trim(perturbation_type(ifield)))
+      case ('relative');  relative(ifield) = .true.
+      case ('absolute');  relative(ifield) = .false.
+      case default
+         string1 = 'perturbation_type must be "relative" or "absolute" for "'// &
+                   trim(fields_to_perturb(ifield))//'"'
+         call error_handler(E_ERR, routine, string1, source)
+   end select
+   field_of_var(ivar) = ifield
+   do idim = 1, get_num_dims(dom_restart, ivar)
+      if (get_dim_name(dom_restart, ivar, idim) == 'column') col_dim(ivar) = idim
+      if (get_dim_name(dom_restart, ivar, idim) == 'levtot') lev_dim(ivar) = idim
+   enddo
+   if (perturb_soil_levels_only .and. lev_dim(ivar) > 0 .and. nlevsno < 0) then
+      string1 = 'cannot separate snow from soil layers for "'//trim(fields_to_perturb(ifield))// &
+                '": number of snow levels was not read from the restart'
+      call error_handler(E_ERR, routine, string1, source)
+   endif
+enddo
+if (nfields == 0) call error_handler(E_ERR, routine, &
+   'custom_routine_to_generate_ensemble is set but fields_to_perturb is empty', source)
+
+! Each task perturbs the state elements it holds, with its own random sequence.
+call init_random_seq(seq, my_task_id()+1)
+
+state_items = get_my_num_vars(ens_handle)
+allocate(my_vars(state_items))
+call get_my_vars(ens_handle, my_vars)
+
+do i = 1, state_items
+   call get_model_variable_indices(my_vars(i), iloc, jloc, kloc, var_id=var_id, dom_id=dom_id)
+   if (dom_id /= dom_restart) cycle
+   ifield = field_of_var(var_id)
+   if (ifield == 0) cycle
+
+   loc = (/ iloc, jloc, kloc /)
+   col = 0
+   lev = 0
+   if (col_dim(var_id) > 0) col = loc(col_dim(var_id))
+   if (lev_dim(var_id) > 0) lev = loc(lev_dim(var_id))
+
+   ! levtot lists the nlevsno snow layers first; they must stay consistent
+   ! with the snow water and depth, so only soil layers are perturbed.
+   if (perturb_soil_levels_only .and. lev > 0 .and. lev <= nlevsno) cycle
+   if (perturb_natural_crop_columns_only .and. col > 0) then
+      ltype = cols1d_ityplun(col)
+      if (ltype /= ilun_vegetated_or_bare_soil .and. ltype /= ilun_crop) cycle
+   endif
+
+   amp = perturbation_amplitude(ifield)
+   do j = 1, ens_size
+      x = ens_handle%copies(j, i)
+      if (x == MISSING_R8 .or. abs(x) >= 1.0e30_r8 .or. x /= x) cycle
+      if (relative(ifield)) then
+         if (x <= 0.0_r8) cycle
+         ens_handle%copies(j, i) = max(random_gaussian(seq, x, amp*x), 0.0_r8)
+      else
+         if (x == 0.0_r8) cycle
+         ens_handle%copies(j, i) = random_gaussian(seq, x, amp)
+      endif
+   enddo
+enddo
+
+deallocate(my_vars, field_of_var, col_dim, lev_dim, relative)
 
 end subroutine pert_model_copies
 

@@ -175,6 +175,13 @@ declare -Ag my_elm_dart_cycle_overrides=(
 # rel = fraction of the value (kept >= 0), abs = native units. Empty = no ELM perturbation.
 export my_elm_perturb_specs="H2OSOI_LIQ:rel:0.05 H2OSOI_ICE:rel:0.05 T_SOISNO:abs:0.5"
 export my_elm_perturb_seed=20111101
+# dart:   DART perturb_single_instance with the ELM interface's pert_model_copies
+#         (soil levels of vegetated/bare-soil and crop columns). Needs a rebuilt
+#         ELM interface and an ELM history file on this land grid for the grid.
+# direct: backup; workflow_lib/perturb/elm_perturb_restart.py edits the restarts
+#         (soil levels only, all columns; my_elm_perturb_seed sets the stream).
+export my_elm_perturb_method="dart"
+export my_elm_grid_history_file="/pscratch/sd/z/zhan391/e3sm_dart/dart_test/DARTEN4_WCYCL20TR_ne30pg2_r05_IcoswISC30E3r5_pm-cpu/EN01/archive/lnd/hist/DARTEN4_WCYCL20TR_ne30pg2_r05_IcoswISC30E3r5_pm-cpu.EN01.elm.h1.2011-11-01-00000.nc"
 
 ################################################################################
 # --- Strongly coupled DA setup ----------------------------------------------

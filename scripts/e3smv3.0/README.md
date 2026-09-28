@@ -1,25 +1,43 @@
 # E3SM–DART Coupled Ensemble Workflow
 
 
-> Maintained ELM repository template for E3SM maint-3.0. Derived from the
+> Maintained repository template for E3SM maint-3.0. Derived from the
 > operational `v3_dart_cda/3_ne30pg2_dart_cpl_en40` workflow on 2026-08-22.
 > Runtime state, logs, backups, deprecated scripts, and experiment output are
 > intentionally excluded. Review every setting in `create_and_setup_case.sh`
 > and every `#SBATCH` directive before submission.
 
-This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-assimilation workflow for a 40-member coupled E3SM ensemble. The numbered scripts are the user-facing entry points. Internal workers and templates live under `workflow_lib/` and should not normally be executed directly.
+This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-assimilation workflow for a coupled E3SM ensemble. The numbered scripts are the user-facing entry points. Internal workers and templates live under `workflow_lib/` and should not normally be executed directly.
+
+## Branch scope
+
+- `main` (this branch) is focused on **EAM-DART**: atmospheric assimilation
+  in fully coupled E3SM. This is the tested path.
+- **ELM-DART** is supported by the workflow on `main` but has **not been tested
+  yet**. It is disabled in the default configuration.
+- **Strongly coupled DA** is developed on the separate `strongly-coupled`
+  branch. The strongly coupled switches described below exist on `main` for
+  interface compatibility, but that mode is not maintained or tested here.
+
+The default `create_and_setup_case.sh` is a small Perlmutter (`pm-cpu`)
+functional test: 4 members, 16 nodes (4 per member), 6-hourly cycles from
+2011-11-01 00Z to 18Z, EAM DA on, ELM DA off, strongly coupled DA off, and up
+to three cycles per Step 4 allocation. The operational template it derives from
+uses 40 members on 160 nodes; scale up by editing `create_and_setup_case.sh` and
+the `#SBATCH` directives together.
 
 
-## ELM integration
+## ELM integration (not yet tested)
 
 Step 1 installs the flattened Fortran files from
 `../../DART_SourceMods/e3sm_maint_3.0/src.elm` into every generated E3SM case
 before `case.setup` and compilation. CIME requires these files directly under
 `SourceMods/src.elm`; component source subdirectories must not be reproduced.
 
-The repository template enables both EAM and ELM analyses, leaves strongly
-coupled sequential-prior/posterior exchange off, resets the completed-cycle
-counter to zero, and attempts one cycle per allocation. Change these controls
+The default configuration enables EAM analyses only; ELM analyses stay off
+until SMAP observation files are staged and the ELM-DART path is tested.
+Strongly coupled sequential-prior/posterior exchange is off, and the
+completed-cycle counter starts at zero. Change these controls
 only in `create_and_setup_case.sh` after matching the restart and status state.
 All raw model output uses the fixed per-member layout `ENxx/archive`. The ELM
 `h1` and vector `h2` streams are written as six-hourly instantaneous records so
@@ -417,16 +435,18 @@ every component due at that time completes successfully and validates all
 ensemble members.
 
 When EAM and ELM are both due, their execution mode is derived from the strongly
-coupled settings:
+coupled settings (ELM-DART is not yet tested on `main`, so both modes below
+describe the intended design):
 
 - Direct mode is used unless both `strongly_coupled_on=on` and
   `lnd_da_use_sequential_prior_post=.true.`. EAM and ELM run concurrently and
-  split the 160-node allocation equally.
+  split the Step 4 allocation (`my_job_nnodes`) equally.
 - Sequential mode is used when both settings above are enabled. EAM runs first
-  on all 160 nodes and produces the sequential prior; after EAM succeeds and
-  the dependent inputs validate, ELM runs on all 160 nodes.
+  on all nodes and produces the sequential prior; after EAM succeeds and
+  the dependent inputs validate, ELM runs on all nodes. Strongly coupled DA is
+  developed on the `strongly-coupled` branch; use that branch for this mode.
 
-If only one component is due, it receives all 160 nodes. If neither component
+If only one component is due, it receives all nodes. If neither component
 is due, Step 4 performs a forecast-only cycle. A failed component assimilation
 leaves an in-progress marker, and the retry path rebuilds every forecast member
 before assimilation is attempted again.
@@ -440,7 +460,7 @@ Component assimilation is controlled in `create_and_setup_case.sh`:
 
 ```bash
 export my_eam_dart_da="on"   # on or off
-export my_elm_dart_da="on"   # on or off
+export my_elm_dart_da="off"  # on or off; ELM-DART is not yet tested
 ```
 
 The enable switches do not determine cadence: an enabled component runs only

@@ -8,6 +8,11 @@
 [[ -r "${my_dart_env_file}" ]] || { echo "ERROR: configured DART environment is not readable: ${my_dart_env_file}" >&2; exit 1; }
 echo "Using configured DART machine environment: ${my_dart_env_file}"
 source "${my_dart_env_file}"
+# DART keeps large work arrays on the stack; srun passes this limit to every task.
+ulimit -s unlimited 2>/dev/null || {
+  ulimit -s "$(ulimit -Hs)"
+  echo "WARNING: stack limit capped at $(ulimit -s) KB by this machine; filter may crash if it needs more" >&2
+}
 
 elm_fail() { echo "ERROR: ELM DART: $*" >&2; return 1; }
 elm_require_file() { [[ -s "$1" ]] || elm_fail "missing or empty file: $1"; }
@@ -323,7 +328,7 @@ if [[ "${my_machine}" == "pm-cpu" ]]; then
 else
   ELM_SRUN_BIND=(--mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1)
 fi
-srun --exclusive --nodes="${my_elm_dart_nnodes}" --ntasks="${ELM_DART_NTASKS}" \
+srun --propagate=STACK --exclusive --nodes="${my_elm_dart_nnodes}" --ntasks="${ELM_DART_NTASKS}" \
   "${ELM_SRUN_BIND[@]}" -m plane="${my_task_per_node}" ./filter \
   || elm_fail "filter failed for ${ELM_STAMP}" || return 1
 echo "$(date) -- END ELM FILTER"

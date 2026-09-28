@@ -52,15 +52,15 @@ else
 fi
 cd "${WORK_DIR}"
 source "${WORK_DIR}/create_and_setup_case.sh"
-[[ -n "${my_conda_setup_file:-}" ]] || fail "my_conda_setup_file is unset"
-[[ -r "${my_conda_setup_file}" ]] || fail "configured Conda setup is not readable: ${my_conda_setup_file}"
-[[ -n "${my_analysis_conda_env:-}" ]] || fail "my_analysis_conda_env is unset"
-echo "Activating configured analysis environment: ${my_analysis_conda_env}"
-source "${my_conda_setup_file}"
-conda activate "${my_analysis_conda_env}" || fail "could not activate Conda environment: ${my_analysis_conda_env}"
+# Step 3 needs only the DART build environment: filter's MPI, NetCDF and MKL
+# libraries, plus ncdump for validation. No Conda environment is required.
+[[ -n "${my_dart_env_file:-}" ]] || fail "my_dart_env_file is unset"
+[[ -r "${my_dart_env_file}" ]] || fail "configured DART environment is not readable: ${my_dart_env_file}"
+echo "Using configured DART machine environment: ${my_dart_env_file}"
+source "${my_dart_env_file}"
 mkdir -p "${my_log_dir}" "${my_status_dir}" "${my_lock_dir}"
 
-for cmd in awk bc ex sed grep date dirname find flock mkdir cp ln ncdump ncks readlink rm srun wc; do
+for cmd in awk bc ex sed grep date dirname find flock mkdir cp ln ncdump readlink rm srun wc; do
    check_command "${cmd}"
 done
 
@@ -95,13 +95,12 @@ done
 perturb_status="${my_status_dir}/perturb_complete.${my_refdate}-${my_reftod}"
 rm -f -- "${perturb_status}"
 
-#For cshell:
-#limit stacksize unlimited
-#limit datasize unlimited
-
-#For bash
-#ulimit -s unlimited
-#ulimit -d unlimited
+# DART (Intel Fortran) keeps large per-task work arrays on the stack; the default
+# 8 MB limit makes filter crash with SIGSEGV. srun passes this limit to every task.
+ulimit -s unlimited 2>/dev/null || {
+  ulimit -s "$(ulimit -Hs)"
+  echo "WARNING: stack limit capped at $(ulimit -s) KB by this machine; filter may crash if it needs more" >&2
+}
 
 # ---------------------
 # Purpose
@@ -155,36 +154,16 @@ scomp="eam"
 # machine-specific dereferencing
 # suppress "rm" warnings if wildcard does not match anything
 nonomatch=1
+source "${my_workflow_lib:?}/common/file_commands.sh"
 case ${my_machine} in
         "compy")
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm -fr'
-                LAUNCHCMD="srun --mpi=pmi2 --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
+                LAUNCHCMD="srun --propagate=STACK --mpi=pmi2 --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
                 ;;
         "pm-cpu")
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm'
-                LAUNCHCMD="srun --nodes=${REQUEST_NODES} --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu-bind=cores -c 2 -m plane=${my_task_per_node}"
+                LAUNCHCMD="srun --propagate=STACK --nodes=${REQUEST_NODES} --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu-bind=cores -c 2 -m plane=${my_task_per_node}"
                 ;;
          *)
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm -fr'
-                LAUNCHCMD="srun --mpi=pmi2 --ntasks=${DART_NTASKS} "
+                LAUNCHCMD="srun --propagate=STACK --mpi=pmi2 --ntasks=${DART_NTASKS} "
                 ;;
 
 esac
@@ -238,6 +217,14 @@ member_eam_initial_file() {
   member_archive="${my_modeldir}/${enstr}/archive"
   printf '%s/rest/%s-%s/%s.%s.eam.i.%s.nc\n' "${member_archive}" "${START_DATE}" "${START_TOD}" "${DART_CASE}" "${enstr}" "${ATM_DATE_EXT}"
 }
+# Succeed only if every named variable is defined in the NetCDF file header.
+has_eam_core_vars() {
+  local file="$1" header var
+  header=$(ncdump -h "${file}" 2>/dev/null) || return 1
+  for var in PS U V T Q; do
+    grep -qE "^[[:space:]]+[a-z0-9_]+ ${var}\(" <<< "${header}" || return 1
+  done
+}
 validate_step3_input_ensemble() {
   local i enstr input_file
   for i in `seq 1 ${DART_ENSNUM}`; do
@@ -246,7 +233,7 @@ validate_step3_input_ensemble() {
     if [ ! -s "${input_file}" ] || ! ncdump -h "${input_file}" >/dev/null 2>&1; then
       fail "missing or invalid step-2 EAM state for ${enstr}: ${input_file}"
     fi
-    if ! ncks -m -v PS,U,V,T,Q "${input_file}" >/dev/null 2>&1; then
+    if ! has_eam_core_vars "${input_file}"; then
       fail "step-2 EAM state lacks core variables for ${enstr}: ${input_file}"
     fi
   done
@@ -274,9 +261,6 @@ safe_reset_dart_workdir() {
 
 validate_step3_dependencies
 validate_step3_input_ensemble
-for member_marker in "${PERTURB_MARKERS[@]}"; do
-   printf 'valid_time=%s-%s\ncase=%s\nensemble_size=%s\narchive_layout=%s\ndart_root=%s\nslurm_job_id=%s\nstarted_at=%s\n' "${my_refdate}" "${my_reftod}" "${my_casename}" "${my_ensnum}" "per_member" "${my_dart_root}" "${SLURM_JOB_ID:-none}" "$(date '+%Y-%m-%d %H:%M:%S')" > "${member_marker}"
-done
 CURRENT_DADIR="${DART_RUNDIR}/${START_DATE}-${START_TOD}"
 safe_reset_dart_workdir "${CURRENT_DADIR}"
 
@@ -526,7 +510,10 @@ OBSFNAME=`printf obs_seq.%04d-%02d-%02d-%05d ${ATM_YEAR} ${ATM_MONTH} ${ATM_DAY}
 OBS_FILE=${BASE_OBSDIR}/${YYYYMM}_6H_CESM/${OBSFNAME}
 #echo "OBS_FILE = $OBS_FILE"
 
-${REMOVE} obs_seq.out
+if [ -e obs_seq.out ]; then
+  ${REMOVE} obs_seq.out
+fi 
+
 if [ -e ${OBS_FILE} ]; then
    ${LINK} ${OBS_FILE} obs_seq.out || exit 14
 else
@@ -833,6 +820,13 @@ if [ $input_file_list_name != $output_file_list_name ]; then
    exit 29
 fi
 
+# filter rewrites the archived member files in place through the links above.
+# Mark members only now, so a failure during staging can simply be rerun,
+# while an interrupted filter still requires Step 2 to regenerate clean input.
+for member_marker in "${PERTURB_MARKERS[@]}"; do
+   printf 'valid_time=%s-%s\ncase=%s\nensemble_size=%s\narchive_layout=%s\ndart_root=%s\nslurm_job_id=%s\nstarted_at=%s\n' "${my_refdate}" "${my_reftod}" "${my_casename}" "${my_ensnum}" "per_member" "${my_dart_root}" "${SLURM_JOB_ID:-none}" "$(date '+%Y-%m-%d %H:%M:%S')" > "${member_marker}"
+done
+
 #TEMPSZ: comment out for production run
 echo "`date` -- BEGIN FILTER"
 ${LAUNCHCMD} ${CURRENT_DADIR}/filter || exit 30
@@ -845,7 +839,7 @@ for i in `seq 1 ${DART_ENSNUM}`; do
       echo "ERROR: invalid perturbed member ${i}: ${perturbed_file}"
       exit 39
    fi
-   if ! ncks -m -v PS,U,V,T,Q "${perturbed_file}" >/dev/null 2>&1; then
+   if ! has_eam_core_vars "${perturbed_file}"; then
       echo "ERROR: perturbed member ${i} lacks core EAM variables: ${perturbed_file}"
       exit 42
    fi

@@ -20,7 +20,7 @@ This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-as
   interface compatibility, but that mode is not maintained or tested here.
 
 The default `create_and_setup_case.sh` is a small Perlmutter (`pm-cpu`)
-functional test: 4 members, 16 nodes (4 per member), 6-hourly cycles from
+functional test: 4 members on 4 nodes (each member uses all 4 nodes, one at a time), 6-hourly cycles from
 2011-11-01 00Z to 18Z, EAM DA on, ELM DA off, strongly coupled DA off, and up
 to three cycles per Step 4 allocation. The operational template it derives from
 uses 40 members on 160 nodes; scale up by editing `create_and_setup_case.sh` and
@@ -102,6 +102,7 @@ Steps 1–4 form the core cycling workflow. Steps 5–8 are post-cycle utilities
 ├── 8_run_post_init.sh
 ├── create_and_setup_case.sh
 ├── workflow_lib/
+│   ├── common/         # Shared file commands (MOVE, COPY, LINK, REMOVE) sourced by every stage
 │   ├── compress/       # Step 5 worker
 │   ├── cycle/          # Step 4 cycle, assimilation, and handoff logic
 │   ├── diagnostics/    # Step 6 workers
@@ -126,7 +127,7 @@ Only the numbered scripts should normally be submitted with `sbatch`. Files in `
 
 Important groups include:
 
-- Runtime environments: `my_conda_setup_file` and `my_analysis_conda_env` for Steps 2–3, plus `my_dart_env_file` for DART-dependent stages.
+- Runtime environments: `my_analysis_env_file` (NCO) for Steps 2, 7 and 8, plus `my_dart_env_file` for DART-dependent stages (Steps 3–6).
 - Slurm resources: `my_task_per_node`, `my_job_nnodes`, `my_project`, `my_jobqueue`, and `my_walltime`.
 - Ensemble configuration: `my_ensnum`, `my_nodes_per_member`, setup concurrency, and forecast retry settings.
 - Model configuration: `my_e3sm_code`, `my_runtype`, `my_compset`, `my_resolution`, `my_runpath`, and `my_casename`.
@@ -134,9 +135,9 @@ Important groups include:
 - Timeline and DART configuration: `my_e3sm_cycle_hours`, the shared E3SM start/end time, component-specific `my_eam_dart_cycle_hours` and `my_elm_dart_cycle_hours`, DART code and run directories, observation paths, and diagnostic ranges.
 - Cycling behavior: `my_cycles_per_job`, minimum cycle runtime, shutdown margin, and handoff concurrency.
 
-`my_conda_setup_file` and `my_analysis_conda_env` explicitly select the analysis environment that supplies NCO and related tools for initial-condition generation and perturbation.
+`my_analysis_env_file` names the script sourced to provide NCO and related tools for Steps 2, 7 and 8. It defaults to the shared E3SM-Unified environment (`load_latest_e3sm_unified_pm-cpu.sh`); point it at a versioned `load_e3sm_unified_<version>_<machine>.sh` to pin an experiment. Step 3 needs only `my_dart_env_file`.
 
-`my_dart_env_file` names the workflow-owned, machine-specific environment used by cycling, compression, and diagnostics. It resolves from `my_machine` to `workflow_lib/env/env_${my_machine}_specific.sh` (for example, `env_compy_specific.sh`) rather than to a generated file beneath a DART `work/` directory. The numbered drivers validate it before starting substantive work.
+`my_dart_env_file` names the machine-specific environment used by cycling, compression, and diagnostics. It resolves from `my_machine` to `models/mach_env/env_${my_machine}_specific.sh` in the repository root (for example, `env_pm-cpu_specific.sh`), the same file used to build DART, so runtime modules always match the build. The numbered drivers validate it before starting substantive work.
 
 Runtime DART namelists are also workflow-owned. The explicit
 `my_eam_filter_nml`, `my_eam_perturb_nml`, `my_eam_diag_nml`, and
@@ -197,6 +198,10 @@ Step 2 requires a matching Step 1 completion record. It prepares restart inputs 
 - MPAS-O for Full-CPL runs
 
 AMIP does not require MPAS-O, but this workflow still requires MPAS-I and coupler files.
+
+Members are prepared in parallel, up to `my_max_parallel_icbc` at a time
+(set it to 1 to prepare them one by one). Each member writes a log to
+`runtmp/logs/step2_icbc.ENxx.<job>.log`, and any failed member fails the stage.
 
 The completion record is named:
 

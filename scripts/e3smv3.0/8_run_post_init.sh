@@ -46,12 +46,8 @@ fi
 cd "${WORK_DIR}"
 [[ -r create_and_setup_case.sh ]] || fail "missing create_and_setup_case.sh"
 source ./create_and_setup_case.sh
-[[ -n "${my_conda_setup_file:-}" ]] || fail "my_conda_setup_file is unset"
-[[ -r "${my_conda_setup_file}" ]] || fail "configured Conda setup is not readable: ${my_conda_setup_file}"
-[[ -n "${my_analysis_conda_env:-}" ]] || fail "my_analysis_conda_env is unset"
-echo "Activating configured analysis environment: ${my_analysis_conda_env}"
-source "${my_conda_setup_file}"
-conda activate "${my_analysis_conda_env}" || fail "could not activate Conda environment: ${my_analysis_conda_env}"
+source "${my_workflow_lib:?}/common/analysis_env.sh"
+load_analysis_env || fail "could not load the analysis environment"
 
 for cmd in awk date flock mktemp mv ncdump ncks ncrename readlink rm; do
   command -v "${cmd}" >/dev/null 2>&1 || fail "required command not found: ${cmd}"

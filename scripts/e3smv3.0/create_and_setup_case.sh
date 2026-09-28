@@ -24,16 +24,19 @@ export my_project="m4849"
 export my_jobqueue="regular"
 export my_walltime="01:00:00"
 export my_task_per_node=128
-export my_job_nnodes=16
+export my_job_nnodes=4
 export my_layout="custom-4_1x6_nhours"
 
 ################################################################################
 # --- Machine and Slurm defaults ---------------------------------------------
-# Explicit analysis environment used by Steps 2 and 3 for NCO and related tools.
+# Analysis environment (NCO and related tools) sourced by Steps 2, 7 and 8.
 ################################################################################
-export my_conda_setup_file="/global/common/software/nersc/pe/conda/26.1.0/Miniforge3-25.11.0-1/etc/profile.d/conda.sh"
-export my_analysis_conda_env="e3sm_analysis"
-export my_dart_env_file="${my_workflow_lib}/env/env_${my_machine}_specific.sh"
+# Shared E3SM-Unified environment. On Compy use
+# /share/apps/E3SM/conda_envs/load_latest_e3sm_unified_compy.sh. Point this at a
+# versioned load_e3sm_unified_<version>_<machine>.sh to pin an experiment.
+export my_analysis_env_file="/global/common/software/e3sm/anaconda_envs/load_latest_e3sm_unified_pm-cpu.sh"
+# Same machine environment used to build DART, so runtime modules match the build.
+export my_dart_env_file="${my_repository_root}/models/mach_env/env_${my_machine}_specific.sh"
 export my_eam_filter_nml="${my_workflow_lib}/namelists/eam/filter.nml"
 export my_eam_perturb_nml="${my_workflow_lib}/namelists/eam/perturb.nml"
 export my_eam_diag_nml="${my_workflow_lib}/namelists/eam/diagnostics.nml"
@@ -52,6 +55,8 @@ export my_retry_forecast_timeout_sec=2400
 export my_wait_poll_interval_sec=20
 export my_skip_completed_members=FALSE
 export my_max_parallel_setup=4
+# Members whose Step 2 initial conditions are prepared at once (I/O bound).
+export my_max_parallel_icbc=4
 export my_max_parallel_handoff=4
 # Cycles attempted in one Step 4 allocation; use 1 for one cycle per job.
 export my_cycles_per_job=3

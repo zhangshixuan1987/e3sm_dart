@@ -57,13 +57,12 @@ fi
 cd "${my_wkdir}"
 source "${my_wkdir}/create_and_setup_case.sh"
 
-[[ -n "${my_conda_setup_file:-}" ]] || fail "my_conda_setup_file is unset"
-[[ -r "${my_conda_setup_file}" ]] || fail "configured Conda setup is not readable: ${my_conda_setup_file}"
-[[ -n "${my_analysis_conda_env:-}" ]] || fail "my_analysis_conda_env is unset"
-echo "Activating configured analysis environment: ${my_analysis_conda_env}"
-source "${my_conda_setup_file}"
-conda activate "${my_analysis_conda_env}" || fail "could not activate Conda environment: ${my_analysis_conda_env}"
+source "${my_workflow_lib:?}/common/analysis_env.sh"
+load_analysis_env || fail "could not load the analysis environment"
 mkdir -p "${my_log_dir}" "${my_status_dir}" "${my_lock_dir}"
+# Members read the same reference files concurrently. HDF5 (netCDF-4) file
+# locking can fail on shared file systems, and no two members write one file.
+export HDF5_USE_FILE_LOCKING=FALSE
 
 for cmd in awk bc ncks ncap2 ncrename ncdump dirname flock mkdir cp mv readlink rm touch; do
   check_command "${cmd}"
@@ -106,28 +105,26 @@ echo "valid time is $REF_DATE $REF_TOD (seconds) $REF_HOUR (hours)"
 # ==============================================================================
 # machine-specific dereferencing
 # suppress "rm" warnings if wildcard does not match anything
-VERBOSE='-v'
-MOVE='/usr/bin/mv'
-COPY='/usr/bin/cp --preserve=timestamps'
-LINK='/usr/bin/ln -fs'
-LINKV=TRUE
-LIST='/usr/bin/ls'
-REMOVE='/usr/bin/rm -fr'
+source "${my_workflow_lib:?}/common/file_commands.sh"
 # ==============================================================================
 
 prepare_mpas_restart() {
   local source_file="$1"
   local destination_file="$2"
   local tmp_file="${destination_file}.tmp.${SLURM_JOB_ID:-$$}"
-  rm -f -- "${tmp_file}"
+  # Also clear leftovers from a job killed mid-write; the step-2 lock guarantees
+  # no other job is writing this member now.
+  rm -f -- "${destination_file}".tmp.*
   ncks -O --hdr_pad=10000 "${source_file}" "${tmp_file}" || return 1
-  ncrename -v xtime,xtime.orig "${tmp_file}" || return 1
+  ncrename -v .xtime,xtime.orig "${tmp_file}" || return 1
   ncdump -h "${tmp_file}" >/dev/null 2>&1 || return 1
   touch --reference="${source_file}" "${tmp_file}" || return 1
   mv -f "${tmp_file}" "${destination_file}"
 }
-# Loop over members
-for i in `seq 1 ${my_ensnum}`;do
+# Prepare one member's initial conditions. Members write only to their own
+# archive directory and read the shared reference files, so they run in parallel.
+prepare_member_ic() {
+  local i="$1"
   echo === Member ${i} ===
   ENSTR=EN`printf "%02d" ${i}`
   DART_CASE=${my_casename}.${ENSTR}
@@ -135,9 +132,7 @@ for i in `seq 1 ${my_ensnum}`;do
   CASE_ARCHIVE_DIR="${MEMBER_ARCHIVE_DIR}/rest/${REF_DATE}-${REF_TOD}"
   echo "Run Case: ${DART_CASE}"
   echo "Run Directory: ${CASE_ARCHIVE_DIR}"
-  if [ ! -d "${CASE_ARCHIVE_DIR}" ];then
-    mkdir -p "${CASE_ARCHIVE_DIR}"
-  fi
+  [[ -d "${CASE_ARCHIVE_DIR}" ]] || { echo "ERROR: member directory was not created: ${CASE_ARCHIVE_DIR}"; exit 1; }
   for scomp in "atm" "lnd" "rof" "ocn" "ice" "drv"; do
      echo === E3SM component ${scomp} ===
      cd ${CASE_ARCHIVE_DIR}
@@ -240,7 +235,52 @@ for i in `seq 1 ${my_ensnum}`;do
         echo "${CPL_INITIAL_FILENAME}"  >  rpointer.drv
      fi
   done
+}
+
+# Build every member's archive directory first, in order, so path or permission
+# problems stop the stage before any large file is copied.
+for i in $(seq 1 "${my_ensnum}"); do
+  member_rest_dir="${my_modeldir}/$(printf 'EN%02d' "${i}")/archive/rest/${REF_DATE}-${REF_TOD}"
+  mkdir -p "${member_rest_dir}" || fail "cannot create member directory: ${member_rest_dir}"
 done
+echo "Created archive directories for ${my_ensnum} members"
+
+MAX_PARALLEL_ICBC=${my_max_parallel_icbc:-4}
+validate_positive_int "my_max_parallel_icbc" "${MAX_PARALLEL_ICBC}"
+echo "Preparing ${my_ensnum} members, up to ${MAX_PARALLEL_ICBC} at a time; per-member logs in ${my_log_dir}"
+icbc_pids=()
+icbc_members=()
+failed_members=()
+
+# Wait for the oldest running member and record whether it succeeded.
+wait_oldest_member() {
+  local pid="${icbc_pids[0]}"
+  local enstr="${icbc_members[0]}"
+  local log="${my_log_dir}/step2_icbc.${enstr}.${SLURM_JOB_ID:-$$}.log"
+  icbc_pids=("${icbc_pids[@]:1}")
+  icbc_members=("${icbc_members[@]:1}")
+  if wait "${pid}"; then
+    echo "Member ${enstr} prepared"
+  else
+    echo "ERROR: member ${enstr} failed; last lines of ${log}:"
+    tail -n 20 "${log}" || true
+    failed_members+=("${enstr}")
+  fi
+}
+
+for i in $(seq 1 "${my_ensnum}"); do
+  ENSTR=$(printf 'EN%02d' "${i}")
+  ( prepare_member_ic "${i}" ) > "${my_log_dir}/step2_icbc.${ENSTR}.${SLURM_JOB_ID:-$$}.log" 2>&1 &
+  icbc_pids+=("$!")
+  icbc_members+=("${ENSTR}")
+  if (( ${#icbc_pids[@]} >= MAX_PARALLEL_ICBC )); then
+    wait_oldest_member
+  fi
+done
+while (( ${#icbc_pids[@]} > 0 )); do
+  wait_oldest_member
+done
+(( ${#failed_members[@]} == 0 )) || fail "initial-condition preparation failed for ${#failed_members[@]} member(s): ${failed_members[*]}"
 
 # Validate every required component before declaring step 2 complete.
 for i in `seq 1 ${my_ensnum}`; do

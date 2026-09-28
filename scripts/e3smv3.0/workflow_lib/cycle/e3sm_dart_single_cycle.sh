@@ -602,8 +602,21 @@ preflight_cycle_inputs
 if (( my_job_nnodes % NODES_PER_MEMBER != 0 )); then
   fail "my_job_nnodes (${my_job_nnodes}) must be divisible by ${NODES_PER_MEMBER}"
 fi
+# The member cases' PE layout (fixed by my_layout in Step 1) must match
+# my_nodes_per_member; otherwise concurrent members oversubscribe the allocation.
+# Members are clones of one case, so EN01 represents them all.
+member_totalpes=$(cd "${CASE_ROOT}" && ./xmlquery TOTALPES --value) || fail "could not query TOTALPES from ${CASE_ROOT}"
+member_tasks_per_node=$(cd "${CASE_ROOT}" && ./xmlquery MAX_TASKS_PER_NODE --value) || fail "could not query MAX_TASKS_PER_NODE from ${CASE_ROOT}"
+validate_positive_int "TOTALPES" "${member_totalpes}"
+validate_positive_int "MAX_TASKS_PER_NODE" "${member_tasks_per_node}"
+member_nodes_needed=$(( (member_totalpes + member_tasks_per_node - 1) / member_tasks_per_node ))
+if (( member_nodes_needed != NODES_PER_MEMBER )); then
+  fail "member cases use ${member_totalpes} PEs (${member_nodes_needed} node(s) at ${member_tasks_per_node} tasks/node) but my_nodes_per_member=${NODES_PER_MEMBER}; set my_nodes_per_member=${member_nodes_needed} or rebuild the cases with a matching my_layout"
+fi
+
 BATCH_SIZE=$((my_job_nnodes / NODES_PER_MEMBER))
 (( BATCH_SIZE >= 1 )) || fail "invalid forecast batch size: ${BATCH_SIZE}"
+echo "Forecast layout: ${member_nodes_needed} node(s) per member, ${BATCH_SIZE} member(s) per wave on ${my_job_nnodes} node(s)"
 
 prepare_member() (
   local i="$1"

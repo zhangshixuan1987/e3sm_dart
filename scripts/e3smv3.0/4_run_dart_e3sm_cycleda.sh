@@ -8,7 +8,7 @@
 #SBATCH --constraint=cpu
 #SBATCH --qos=regular
 #SBATCH --job-name=e3sm_dart_ensda_cyc
-#SBATCH --nodes=16
+#SBATCH --nodes=4
 #SBATCH --output=runtmp/logs/e3sm_dart_ensda_cyc.%j
 #SBATCH --exclusive
 #SBATCH --no-kill

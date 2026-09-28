@@ -1,10 +1,10 @@
 #!/bin/bash -el
-#For cshell:
-#limit stacksize unlimited
-#limit datasize unlimited
-#For bash
-#ulimit -s unlimited
-#ulimit -d unlimited
+# DART (Intel Fortran) keeps large per-task work arrays on the stack; the default
+# 8 MB limit makes filter crash with SIGSEGV. srun passes this limit to every task.
+ulimit -s unlimited 2>/dev/null || {
+  ulimit -s "$(ulimit -Hs)"
+  echo "WARNING: stack limit capped at $(ulimit -s) KB by this machine; filter may crash if it needs more" >&2
+}
 
 # ---------------------
 # Purpose
@@ -49,36 +49,16 @@ cs_grid_file="SEMapping_cs_grid.nc"
 # machine-specific dereferencing
 # suppress "rm" warnings if wildcard does not match anything
 nonomatch=1
+source "${my_workflow_lib:?}/common/file_commands.sh"
 case ${my_machine} in
         "compy")
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm -fr'
-                LAUNCHCMD="srun --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
+                LAUNCHCMD="srun --propagate=STACK --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
                 ;;
         "pm-cpu")
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm'
-                LAUNCHCMD="srun --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu-bind=cores -c 2 -m plane=${my_task_per_node}"
+                LAUNCHCMD="srun --propagate=STACK --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu-bind=cores -c 2 -m plane=${my_task_per_node}"
                 ;;
          *)
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm -fr'
-                LAUNCHCMD="srun --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
+                LAUNCHCMD="srun --propagate=STACK --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
                 ;;
 
 esac

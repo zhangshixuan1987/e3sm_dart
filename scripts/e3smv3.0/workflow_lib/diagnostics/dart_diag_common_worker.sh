@@ -29,14 +29,6 @@ echo ============================================
 
 #export SLURM_NNODES=20
 #export SLURM_NTASKS=800
-
-VERBOSE='-v'
-MOVE='/usr/bin/mv'
-COPY='/usr/bin/cp --preserve=timestamps'
-LINK='/usr/bin/ln -fs'
-LINKV=TRUE
-LIST='/usr/bin/ls'
-REMOVE='/usr/bin/rm'
 LAUNCHCMD="srun -N 1 -n ${DIAG_TASKS:-24}"
 
 my_wkdir=${PWD}
@@ -44,6 +36,7 @@ scomp="eam"
 cd ${my_wkdir}
 
 source ./create_and_setup_case.sh
+source "${my_workflow_lib:?}/common/file_commands.sh"
 [[ -n "${my_dart_env_file:-}" ]] || { echo "ERROR: my_dart_env_file is unset" >&2; exit 1; }
 [[ -r "${my_dart_env_file}" ]] || { echo "ERROR: configured DART environment is not readable: ${my_dart_env_file}" >&2; exit 1; }
 echo "Using configured DART machine environment: ${my_dart_env_file}"

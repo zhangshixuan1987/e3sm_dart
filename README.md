@@ -517,6 +517,16 @@ shixuan.zhang@pnnl.gov
 
 ## Acknowledgments
 
+This work is supported by the U.S. Department of Energy (DOE), Office of
+Science, Biological and Environmental Research, Earth and Environmental
+System Modeling, Regional and Global Model Analysis (RGMA) program area,
+through the project "Coupled Land-Atmosphere-Ocean Data Assimilation for E3SM
+with DART for Understanding Subseasonal-to-Seasonal Predictability of Extreme
+Events" (University of Utah, Pacific Northwest National Laboratory, and the
+NSF National Center for Atmospheric Research):
+
+https://eesm.science.energy.gov/projects/coupled-land-atmosphere-ocean-data-assimilation-e3sm-dart-understanding-subseasonal
+
 Repository organization is adapted from the DART-as-a-submodule example
 provided by Helen Kershaw (NCAR):
 

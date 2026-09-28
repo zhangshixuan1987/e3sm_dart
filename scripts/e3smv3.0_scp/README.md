@@ -444,6 +444,34 @@ This catches shell syntax errors but does not replace runtime preflight or a con
 
 Files under `deprecated/` are retained only for historical reference. They are not part of the active workflow and may lack current safety checks. Do not submit them as replacements for numbered stages.
 
+### Strongly coupled four-pass cycle
+
+With `strongly_coupled_on="on"` and both EAM and ELM DA due (their cadences
+must match), Step 4 runs four `filter` passes in order, each on all nodes and
+each starting from the previous pass's in-place analysis:
+
+| Pass | Filter | State ← observations | Observation input | Work directory |
+| --- | --- | --- | --- | --- |
+| 1. EAM DA | EAM | Atmosphere ← Atmosphere | `my_eam_dart_obsdir` | `eam/<time>` |
+| 2. EAM → ELM | ELM | Land ← Atmosphere | Pass 1 `obs_seq.final` | `elm/<time>.eam_to_elm` |
+| 3. ELM DA | ELM | Land ← Land | `my_elm_dart_obsdir/YYYYMM_6H/obs_seq.<time>` | `elm/<time>` |
+| 4. ELM → EAM | EAM | Atmosphere ← Land | Pass 3 `obs_seq.final` | `eam/<time>.elm_to_eam` |
+
+- Passes 1 and 3 write their observation-space prior ensemble into
+  `obs_seq.final` (`output_sequential_prior_post`); passes 2 and 4 read it
+  (`use_sequential_prior_post`) instead of computing forward operators.
+- Only the cross passes (2 and 4) set `strongly_coupled = .true.`, and they run
+  without inflation, so only the direct passes adapt and store inflation.
+- Each pass uses its component's localization cutoff. Cross passes take
+  `&obs_kind_nml` from the observation source's template, so pass 2 assimilates
+  the EAM observation types and pass 4 the ELM types. Both DART interfaces must
+  therefore be built with atmospheric and land observation definitions (see
+  `models/eam-se/work/input.nml` and `models/elm/work/input.nml`).
+- Logs: `runtmp/logs/assim.scp.<job>.cycle<N>.pass{1..4}.log`.
+- A cycle-level marker (`transactions/<time>/.dart_scp_passes_in_progress`)
+  covers all four passes. If any pass fails, the next attempt rebuilds every
+  forecast member instead of re-running passes on partially updated states.
+
 ### Component assimilation scheduling in Step 4
 
 The E3SM forecast advances on the shared `my_e3sm_cycle_hours` timeline. EAM

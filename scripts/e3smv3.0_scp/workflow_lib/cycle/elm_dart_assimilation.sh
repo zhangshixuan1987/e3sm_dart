@@ -214,9 +214,10 @@ elm_preflight() {
 ELM_WORK="${my_elm_dart_code}/models/${my_elm_dart_model}/work"
 ELM_STAMP=$(printf '%04d-%02d-%02d-%05d' "$((10#${DART_YEAR}))" "$((10#${DART_MONTH}))" "$((10#${DART_DAY}))" "$((10#${DART_SECONDS}))")
 ELM_RUNROOT="${my_elm_dart_run_dir}"
-ELM_DADIR="${ELM_RUNROOT}/${ELM_STAMP}"
+# Strongly coupled cross passes (ELM_PASS_TAG) use their own directory and record.
+ELM_DADIR="${ELM_RUNROOT}/${ELM_STAMP}${ELM_PASS_TAG:+.${ELM_PASS_TAG}}"
 ELM_MARKER="${DA_TRANSACTION_DIR}/.dart_elm_filter_in_progress"
-ELM_COMPLETE="${my_status_dir}/elm_assim_complete.${ELM_STAMP}"
+ELM_COMPLETE="${my_status_dir}/elm_assim_complete.${ELM_STAMP}${ELM_PASS_TAG:+.${ELM_PASS_TAG}}"
 ELM_APPLY_LND_PROFILE="FALSE"
 ELM_USES_SEQUENTIAL_PRIOR="FALSE"
 case "${strongly_coupled_on,,}" in
@@ -248,6 +249,12 @@ printf 'cycle=%s\nvalid_time=%s\nslurm_job_id=%s\nstarted_at=%s\nphase=elm_filte
 
 cp -p "${my_elm_filter_nml}" "${ELM_DADIR}/input.nml" || return 1
 elm_configure_namelist "${ELM_DADIR}/input.nml" || elm_fail "could not configure input.nml" || return 1
+# Cross passes assimilate the observation types of the component that produced them.
+if [[ -n "${ELM_OBS_KIND_SOURCE:-}" ]]; then
+  source "${my_workflow_lib:?}/common/namelist_tools.sh"
+  nml_replace_group "${ELM_DADIR}/input.nml" obs_kind_nml "${ELM_OBS_KIND_SOURCE}" || elm_fail "could not set observation types" || return 1
+  echo "Observation types taken from ${ELM_OBS_KIND_SOURCE}"
+fi
 ln -s "${ELM_OBS}" "${ELM_DADIR}/${ELM_OBS_LINK_NAME}" || return 1
 for executable in filter elm_to_dart; do
   cp -p "${ELM_WORK}/${executable}" "${ELM_DADIR}/${executable}" || return 1
@@ -295,7 +302,7 @@ if [[ "${ELM_APPLY_LND_PROFILE}" != "TRUE" ]] || (( lnd_da_inf_flavor_prior != 0
     [[ "${need_posterior}" != "TRUE" ]] || compgen -G "${candidate}/output_postinf_*.nc" >/dev/null || continue
     previous_dir="${candidate}"
     break
-  done < <(find "${ELM_RUNROOT}" -mindepth 1 -maxdepth 1 -type d ! -path "${ELM_DADIR}" -print | sort -r)
+  done < <(find "${ELM_RUNROOT}" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' ! -name '*.*' ! -path "${ELM_DADIR}" -print | sort -r)
   if [[ -n "${previous_dir}" ]]; then
     if [[ "${need_prior}" == "TRUE" ]]; then
       for source in "${previous_dir}"/output_priorinf_*.nc; do

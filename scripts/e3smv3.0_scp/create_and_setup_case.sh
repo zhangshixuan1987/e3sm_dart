@@ -156,15 +156,15 @@ declare -Ag my_eam_cycle_overrides=(
 # --- ELM DART assimilation --------------------------------------------------
 # ELM DA links single-record h1 history and h2 vector files from each member archive.
 ################################################################################
-# ELM DA is off until SMAP obs_seq files are staged on Perlmutter.
-export my_elm_dart_da="off"
+# Land observations (SMAP soil moisture, MODIS LAI) as YYYYMM_6H/obs_seq.<time>.
+export my_elm_dart_da="on"
 export my_elm_dart_cycle_hours=6
 export my_elm_dart_end_date="${my_e3sm_end_date}"
 export my_elm_dart_end_tod="${my_e3sm_end_tod}"
 export my_elm_dart_run_dir="${my_dart_root}/elm"
 export my_elm_dart_code="${my_repository_root}"
 export my_elm_sourcemods_dir="${my_elm_dart_code}/models/elm/DART_SourceMods/e3sm_maint_3.0/src.elm"
-export my_elm_dart_obsdir="/global/cfs/cdirs/m4849/zhan391/reference/SMAP"
+export my_elm_dart_obsdir="/global/cfs/cdirs/m4849/zhan391/reference/LAND_SURFACE_OBS"
 export my_elm_dart_model="elm"
 export my_elm_history_stream="h1"
 export my_elm_vector_history_stream="h2"
@@ -173,8 +173,17 @@ declare -Ag my_elm_dart_cycle_overrides=(
 
 ################################################################################
 # --- Strongly coupled DA setup ----------------------------------------------
+# With strongly_coupled_on="on" and EAM and ELM DA both due, Step 4 runs four
+# filter passes, each on all nodes:
+#   1 EAM DA      atmospheric obs -> EAM   (writes sequential priors)
+#   2 EAM -> ELM  pass-1 obs_seq.final -> ELM
+#   3 ELM DA      land obs -> ELM          (writes sequential priors)
+#   4 ELM -> EAM  pass-3 obs_seq.final -> EAM
+# Step 4 sets output/use_sequential_prior_post, strongly_coupled, state_model
+# and obs_model for each pass, and turns inflation off in passes 2 and 4. The
+# values below are the direct-pass defaults, used when only one component is due.
 ################################################################################
-export strongly_coupled_on="off"
+export strongly_coupled_on="on"
 
 export atm_da_compute_posterior=".false."
 export atm_da_output_sequential_prior_post=".false."

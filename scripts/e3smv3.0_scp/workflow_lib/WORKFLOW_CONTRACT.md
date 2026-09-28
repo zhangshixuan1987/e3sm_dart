@@ -27,3 +27,11 @@ failure recovery, handoff, counter update, and continuation decisions.
 The only active source difference permitted between experiment trees is the
 Step 4 Slurm walltime/node request. Runtime state, archives, configurations,
 and README files are not synchronized as engine source.
+
+## Strongly coupled four-pass cycle (e3smv3.0_scp)
+
+With `strongly_coupled_on=on` and both components due, the sequential mode above
+is replaced by four passes on all nodes: EAM DA, EAM -> ELM, ELM DA, ELM -> EAM.
+Passes 1 and 3 output sequential priors; passes 2 and 4 use them with
+`strongly_coupled = .true.` and no inflation. A failure in any pass leaves
+`.dart_scp_passes_in_progress`, which forces a full forecast rebuild.

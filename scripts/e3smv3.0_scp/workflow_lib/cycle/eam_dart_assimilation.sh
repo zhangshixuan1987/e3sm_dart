@@ -119,7 +119,9 @@ fi
 TMP_DATE=`printf "%04d" ${DART_YEAR}`-`printf "%02d" ${DART_MONTH}`-`printf "%02d" ${DART_DAY}`
 TMP_TOD=`printf "%05d" ${DART_SECONDS}`
 ATM_DATE_EXT=${TMP_DATE}-${TMP_TOD}
-CURRENT_DADIR=${DART_RUNDIR}/${ATM_DATE_EXT}
+# Strongly coupled cross passes (EAM_PASS_TAG) run in their own directory so they
+# never overwrite the direct pass's outputs, inflation files or obs_seq.final.
+CURRENT_DADIR=${DART_RUNDIR}/${ATM_DATE_EXT}${EAM_PASS_TAG:+.${EAM_PASS_TAG}}
 if [ ! -d ${CURRENT_DADIR} ]; then
   mkdir -p ${CURRENT_DADIR}
 else
@@ -272,9 +274,17 @@ case "${strongly_coupled_on,,}" in
       Atmosphere:Atmosphere|Atmosphere:Land|Land:Atmosphere|Land:Land) ;;
       *) echo "ERROR: strongly coupled state/obs models must each be Atmosphere or Land"; exit 45 ;;
     esac
-    for required_key in compute_posterior output_sequential_prior_post use_sequential_prior_post output_mean output_sd output_members strongly_coupled state_model obs_model; do
-      grep -Eq "^[[:space:]]*${required_key}[[:space:]]*=" input.nml || { echo "ERROR: input.nml does not contain required setting: ${required_key}"; exit 45; }
+    if [[ "${atm_da_output_sequential_prior_post}" == ".true." && "${atm_da_use_sequential_prior_post}" == ".true." ]]; then
+      echo "ERROR: an EAM pass cannot both output and use sequential priors"; exit 45
+    fi
+    # The template may lack the strongly coupled settings; add them so the
+    # edits below always have a line to change.
+    for required_key in compute_posterior output_sequential_prior_post use_sequential_prior_post output_mean output_sd output_members; do
+      grep -Eq "^[[:space:]]*${required_key}[[:space:]]*=" input.nml || sed -i "/^[[:space:]]*&filter_nml/a\\   ${required_key} = .false." input.nml || exit 45
     done
+    if ! grep -Eiq '^[[:space:]]*&strongly_coupled_localization_nml' input.nml; then
+      printf '\n&strongly_coupled_localization_nml\n   strongly_coupled = .false.\n   state_model = '\''none'\''\n   obs_model = '\''none'\''\n   /\n' >> input.nml || exit 45
+    fi
     apply_strongly_coupled_setup=TRUE
     ;;
   off)
@@ -335,7 +345,29 @@ g;state_model ;s;= .*;= '${atm_da_state_model}';
 g;obs_model ;s;= .*;= '${atm_da_obs_model}';
 wq
 ex_end
+  for setting in "compute_posterior = ${atm_da_compute_posterior}" \
+                 "output_sequential_prior_post = ${atm_da_output_sequential_prior_post}" \
+                 "use_sequential_prior_post = ${atm_da_use_sequential_prior_post}" \
+                 "strongly_coupled = ${atm_da_strongly_coupled}" \
+                 "state_model = '${atm_da_state_model}'" \
+                 "obs_model = '${atm_da_obs_model}'"; do
+    grep -Eq "^[[:space:]]*${setting%% = *}[[:space:]]*=[[:space:]]*${setting#* = }[[:space:]]*,?[[:space:]]*$" input.nml || {
+      echo "ERROR: failed to set strongly coupled setting in runtime input.nml: ${setting}"; exit 45; }
+  done
   echo "Strongly coupled DA setup enabled: state=${atm_da_state_model}, obs=${atm_da_obs_model}"
+fi
+
+# Cross passes assimilate the other component's observation types and skip
+# inflation, so only the direct passes adapt and store inflation.
+if [[ -n "${EAM_OBS_KIND_SOURCE:-}" ]]; then
+  source "${my_workflow_lib:?}/common/namelist_tools.sh"
+  nml_replace_group input.nml obs_kind_nml "${EAM_OBS_KIND_SOURCE}" || exit 45
+  echo "Observation types taken from ${EAM_OBS_KIND_SOURCE}"
+fi
+if [[ "${EAM_DISABLE_INFLATION:-FALSE}" == "TRUE" ]]; then
+  sed -i -E "s@^([[:space:]]*inf_flavor[[:space:]]*=).*@\1 0, 0@" input.nml || exit 45
+  grep -Eq "^[[:space:]]*inf_flavor[[:space:]]*=[[:space:]]*0,[[:space:]]*0[[:space:]]*$" input.nml || { echo "ERROR: failed to disable inflation in runtime input.nml"; exit 45; }
+  echo "Inflation disabled for this pass"
 fi
 
 list=`grep '^[ ]*vertical_localization_coord' input.nml`
@@ -501,6 +533,17 @@ fi
 # PERFECT model obs output appends .perfect to the filenames
 # ==============================================================================
 cd ${CURRENT_DADIR}
+if [[ -n "${EAM_SEQUENTIAL_OBS:-}" ]]; then
+  # Cross pass: read the obs_seq.final (with sequential priors) written by the
+  # other component's direct pass instead of the atmospheric observations.
+  if [[ ! -s "${EAM_SEQUENTIAL_OBS}" ]]; then
+    echo "ERROR ... sequential observation file not found: ${EAM_SEQUENTIAL_OBS}"
+    exit 19
+  fi
+  ${REMOVE} obs_seq.out
+  ${LINK} "${EAM_SEQUENTIAL_OBS}" obs_seq.out || exit 18
+  echo "Using sequential observations from ${EAM_SEQUENTIAL_OBS}"
+else
 YYYYMM=`printf %04d%02d ${ATM_YEAR} ${ATM_MONTH}`
 if [ ! -d ${BASE_OBSDIR}/${YYYYMM}_6H_CESM ]; then
    echo "E3SM+DART requires 6 hourly obs_seq files in directories of the form YYYYMM_6H_E3SM"
@@ -519,6 +562,7 @@ else
    echo "ERROR ... no observation file ${OBS_FILE}"
    echo "ERROR ... no observation file ${OBS_FILE}"
    exit 19
+fi
 fi
 
 # ==============================================================================

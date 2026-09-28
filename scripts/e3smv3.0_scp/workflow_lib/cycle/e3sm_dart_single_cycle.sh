@@ -192,6 +192,9 @@ validate_positive_int "my_eam_dart_cycle_hours" "${my_eam_dart_cycle_hours}"
 validate_positive_int "my_elm_dart_cycle_hours" "${my_elm_dart_cycle_hours}"
 (( my_eam_dart_cycle_hours % my_e3sm_cycle_hours == 0 )) || fail "my_eam_dart_cycle_hours must be an integer multiple of my_e3sm_cycle_hours"
 (( my_elm_dart_cycle_hours % my_e3sm_cycle_hours == 0 )) || fail "my_elm_dart_cycle_hours must be an integer multiple of my_e3sm_cycle_hours"
+if [[ "${strongly_coupled_on,,}" == "on" && "${EAM_DART_DA}" == "on" && "${ELM_DART_DA}" == "on" ]]; then
+  (( my_eam_dart_cycle_hours == my_elm_dart_cycle_hours )) || fail "strongly coupled DA requires my_eam_dart_cycle_hours == my_elm_dart_cycle_hours"
+fi
 TARGET_ELAPSED_HOURS=$(((DATA_ASSIMILATION_CYCLES + 1) * my_e3sm_cycle_hours))
 EAM_DART_RUN="off"
 ELM_DART_RUN="off"
@@ -255,7 +258,10 @@ echo "Component DA window at ${DA_TARGET_YMD}-${DA_TARGET_TOD}: EAM=${EAM_DART_R
 DA_TRANSACTION_DIR="${my_dart_root}/transactions/${DA_TARGET_YMD}-${DA_TARGET_TOD}"
 STALE_DART_MARKER="${DA_TRANSACTION_DIR}/.dart_filter_in_progress"
 STALE_ELM_DART_MARKER="${DA_TRANSACTION_DIR}/.dart_elm_filter_in_progress"
-if [[ -e "${STALE_DART_MARKER}" || -e "${STALE_ELM_DART_MARKER}" ]]; then
+# Covers the whole four-pass strongly coupled sequence: after any pass has
+# changed a state, a retry must rebuild the forecast instead of re-running passes.
+STALE_SCP_MARKER="${DA_TRANSACTION_DIR}/.dart_scp_passes_in_progress"
+if [[ -e "${STALE_DART_MARKER}" || -e "${STALE_ELM_DART_MARKER}" || -e "${STALE_SCP_MARKER}" ]]; then
   echo "WARNING: previous EAM or ELM DART attempt did not finish cleanly"
   echo "WARNING: forcing a rebuild of every forecast member before retrying DART"
   SKIP_COMPLETED_MEMBERS="FALSE"
@@ -966,7 +972,7 @@ FORECAST_READY_FOR_DA="TRUE"
 
 # Stale component markers are cleared only after every forecast member has
 # been rebuilt and validated. Each assimilation creates its own fresh marker.
-for stale_marker in "${STALE_DART_MARKER}" "${STALE_ELM_DART_MARKER}"; do
+for stale_marker in "${STALE_DART_MARKER}" "${STALE_ELM_DART_MARKER}" "${STALE_SCP_MARKER}"; do
   if [[ -e "${stale_marker}" ]]; then
     rm -f "${stale_marker}" || fail "could not clear stale DART marker after forecast recovery: ${stale_marker}"
     echo "Cleared stale marker after validating the regenerated forecast ensemble: ${stale_marker}"
@@ -989,8 +995,14 @@ ELM_USES_SEQUENTIAL_PRIOR="FALSE"
 if [[ "${strongly_coupled_on,,}" == "on" && "${lnd_da_use_sequential_prior_post,,}" == ".true." ]]; then
   ELM_USES_SEQUENTIAL_PRIOR="TRUE"
 fi
+# With strongly coupled DA on and both components due, run the four-pass cycle.
+SCP_FOUR_PASS="FALSE"
+if [[ "${strongly_coupled_on,,}" == "on" && "${EAM_DART_RUN}" == "on" && "${ELM_DART_RUN}" == "on" ]]; then
+  SCP_FOUR_PASS="TRUE"
+  ELM_USES_SEQUENTIAL_PRIOR="FALSE"
+fi
 if [[ "${EAM_DART_RUN}" == "on" && "${ELM_DART_RUN}" == "on" ]]; then
-  if [[ "${ELM_USES_SEQUENTIAL_PRIOR}" == "TRUE" ]]; then
+  if [[ "${ELM_USES_SEQUENTIAL_PRIOR}" == "TRUE" || "${SCP_FOUR_PASS}" == "TRUE" ]]; then
     my_eam_dart_nnodes=${my_job_nnodes}
     my_elm_dart_nnodes=${my_job_nnodes}
   else
@@ -1009,6 +1021,67 @@ else
 fi
 echo "DA valid time: ${DA_VALID_TIME}; EAM=${EAM_DART_RUN} (${my_eam_dart_nnodes} nodes); ELM=${ELM_DART_RUN} (${my_elm_dart_nnodes} nodes)"
 
+# Strongly coupled cycle: four sequential filter passes, each on all nodes.
+#   1 EAM DA      atmospheric obs -> EAM   (writes sequential priors to obs_seq.final)
+#   2 EAM -> ELM  pass 1 obs_seq.final -> ELM   (strongly coupled, no inflation)
+#   3 ELM DA      land obs -> ELM          (writes sequential priors to obs_seq.final)
+#   4 ELM -> EAM  pass 3 obs_seq.final -> EAM   (strongly coupled, no inflation)
+# Each pass starts from the previous pass's in-place analysis.
+scp_pass() {
+  local pass="$1" component="$2" log="$3"
+  shift 3
+  echo "$(date '+%F %T') -- BEGIN strongly coupled pass ${pass} (${component})"
+  if ( set -Eeuo pipefail; cd "${my_wkdir}"; export "$@"; . "${my_workflow_lib}/cycle/${component}_dart_assimilation.sh" ) > "${log}" 2>&1; then
+    echo "$(date '+%F %T') -- END strongly coupled pass ${pass}; log: ${log}"
+  else
+    echo "ERROR: strongly coupled pass ${pass} (${component}) failed; last lines of ${log}:"
+    tail -n 40 "${log}" >&2 || true
+    fail "strongly coupled pass ${pass} failed; the next attempt rebuilds every forecast member"
+  fi
+}
+
+run_scp_four_pass() {
+  local log_prefix="${LOG_DIR}/assim.scp.${SLURM_JOB_ID:-$$}.cycle${DATA_ASSIMILATION_CYCLES}"
+  local elm_direct_obs="${my_elm_dart_run_dir}/${DA_VALID_TIME}/elm_obs_seq.${DA_VALID_TIME}.final"
+
+  # Check ELM restarts, history and land observations before any state changes.
+  ( set -Eeuo pipefail; cd "${my_wkdir}"; export lnd_da_use_sequential_prior_post=.false.; ELM_DART_PREFLIGHT_ONLY=TRUE . "${my_workflow_lib}/cycle/elm_dart_assimilation.sh" ) \
+    || fail "ELM DART preflight failed; no strongly coupled pass was started"
+
+  rm -f -- "${my_status_dir}/eam_assim_complete.${DA_VALID_TIME}" "${my_status_dir}/elm_assim_complete.${DA_VALID_TIME}" \
+           "${my_status_dir}/elm_assim_complete.${DA_VALID_TIME}.eam_to_elm" "${my_status_dir}/coupled_assim_complete.${DA_VALID_TIME}"
+  mkdir -p "${DA_TRANSACTION_DIR}" || fail "could not create DA transaction directory: ${DA_TRANSACTION_DIR}"
+  [[ ! -e "${STALE_SCP_MARKER}" ]] || fail "stale strongly coupled marker requires a full forecast rebuild: ${STALE_SCP_MARKER}"
+  printf 'cycle=%s\nvalid_time=%s\nslurm_job_id=%s\nstarted_at=%s\n' \
+    "${DATA_ASSIMILATION_CYCLES}" "${DA_VALID_TIME}" "${SLURM_JOB_ID:-none}" "$(date '+%F %T')" > "${STALE_SCP_MARKER}" \
+    || fail "could not create strongly coupled marker"
+
+  scp_pass 1 eam "${log_prefix}.pass1.log" \
+    atm_da_output_sequential_prior_post=.true. atm_da_use_sequential_prior_post=.false. \
+    atm_da_strongly_coupled=.false. atm_da_state_model=Atmosphere atm_da_obs_model=Atmosphere \
+    EAM_PASS_TAG= EAM_SEQUENTIAL_OBS= EAM_OBS_KIND_SOURCE= EAM_DISABLE_INFLATION=FALSE
+  scp_pass 2 elm "${log_prefix}.pass2.log" \
+    lnd_da_output_sequential_prior_post=.false. lnd_da_use_sequential_prior_post=.true. \
+    lnd_da_strongly_coupled=.true. lnd_da_state_model=Land lnd_da_obs_model=Atmosphere \
+    lnd_da_inf_flavor_prior=0 lnd_da_inf_flavor_posterior=0 \
+    ELM_PASS_TAG=eam_to_elm ELM_OBS_KIND_SOURCE="${my_eam_filter_nml}"
+  scp_pass 3 elm "${log_prefix}.pass3.log" \
+    lnd_da_output_sequential_prior_post=.true. lnd_da_use_sequential_prior_post=.false. \
+    lnd_da_strongly_coupled=.false. lnd_da_state_model=Land lnd_da_obs_model=Land \
+    ELM_PASS_TAG= ELM_OBS_KIND_SOURCE=
+  scp_pass 4 eam "${log_prefix}.pass4.log" \
+    atm_da_output_sequential_prior_post=.false. atm_da_use_sequential_prior_post=.true. \
+    atm_da_strongly_coupled=.true. atm_da_state_model=Atmosphere atm_da_obs_model=Land \
+    EAM_PASS_TAG=elm_to_eam EAM_SEQUENTIAL_OBS="${elm_direct_obs}" \
+    EAM_OBS_KIND_SOURCE="${my_elm_filter_nml}" EAM_DISABLE_INFLATION=TRUE
+
+  rm -f -- "${STALE_SCP_MARKER}" || fail "could not clear strongly coupled marker"
+  echo "Completed all four strongly coupled passes for ${DA_VALID_TIME}"
+}
+
+if [[ "${SCP_FOUR_PASS}" == "TRUE" ]]; then
+  run_scp_four_pass
+else
 if [[ "${ELM_DART_RUN}" == "on" && "${ELM_USES_SEQUENTIAL_PRIOR}" != "TRUE" ]]; then
   ( set -Eeuo pipefail; cd "${my_wkdir}"; ELM_DART_PREFLIGHT_ONLY=TRUE . "${my_workflow_lib}/cycle/elm_dart_assimilation.sh" ) || fail "ELM DART preflight failed; no component assimilation was started"
 fi
@@ -1061,6 +1134,7 @@ if (( eam_da_status != 0 || elm_da_status != 0 )); then
   [[ "${EAM_DART_RUN}" != "on" ]] || { echo "ERROR: EAM log: ${eam_da_log}"; tail -n 40 "${eam_da_log}" >&2 || true; }
   [[ "${ELM_DART_RUN}" != "on" ]] || { echo "ERROR: ELM log: ${elm_da_log}"; tail -n 40 "${elm_da_log}" >&2 || true; }
   fail "cycle handoff blocked because an enabled component analysis failed"
+fi
 fi
 
 write_da_record() {

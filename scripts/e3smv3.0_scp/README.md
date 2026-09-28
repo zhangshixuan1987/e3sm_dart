@@ -1,4 +1,4 @@
-# E3SM–DART Coupled Ensemble Workflow
+# E3SM–DART Strongly Coupled Ensemble Workflow
 
 
 > Maintained repository template for E3SM maint-3.0. Derived from the
@@ -9,15 +9,29 @@
 
 This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-assimilation workflow for a coupled E3SM ensemble. The numbered scripts are the user-facing entry points. Internal workers and templates live under `workflow_lib/` and should not normally be executed directly.
 
-## Branch scope
+## Scope and required DART version
 
-- `main` (this branch) is focused on **EAM-DART**: atmospheric assimilation
-  in fully coupled E3SM. This is the tested path.
-- **ELM-DART** is supported by the workflow on `main` but has **not been tested
-  yet**. It is disabled in the default configuration.
-- **Strongly coupled DA** is developed in `scripts/e3smv3.0_scp/`, which
-  uses the strongly coupled DART fork through the `scp-dart` version profile.
-  The strongly coupled switches described below are kept off in this workflow.
+This directory is the **strongly coupled** variant of `scripts/e3smv3.0/`. It
+tests EAM and ELM assimilation that update each other's states, and it is
+under development.
+
+It requires the strongly coupled DART fork, selected with the `scp-dart`
+version profile (the `main` branch records upstream NCAR DART by default):
+
+```bash
+tools/checkout-version scp-dart
+tools/validate-repository scp-dart
+(cd models/eam-se/work && ./quickbuild.sh)
+(cd models/elm/work && ./quickbuild.sh)
+```
+
+Rebuild both interfaces after every profile switch. Return to the default with
+`tools/checkout-version baseline` (or `git submodule update --init --recursive`)
+and rebuild before running `scripts/e3smv3.0/`.
+
+This workflow uses its own run path (`dart_scp_test`) and case name
+(`SCPEN<n>_...`), so it never shares run directories or runtime state with
+`scripts/e3smv3.0/`.
 
 The default `create_and_setup_case.sh` is a small Perlmutter (`pm-cpu`)
 functional test: 4 members on 4 nodes (each member uses all 4 nodes, one at a time), 6-hourly cycles from
@@ -449,7 +463,7 @@ describe the intended design):
 - Sequential mode is used when both settings above are enabled. EAM runs first
   on all nodes and produces the sequential prior; after EAM succeeds and
   the dependent inputs validate, ELM runs on all nodes. Strongly coupled DA is
-  developed in `scripts/e3smv3.0_scp/`; use that workflow for this mode.
+  the purpose of this workflow; select the `scp-dart` profile before using it.
 
 If only one component is due, it receives all nodes. If neither component
 is due, Step 4 performs a forecast-only cycle. A failed component assimilation

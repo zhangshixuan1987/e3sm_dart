@@ -6,6 +6,7 @@ EAM workflow retained for reference.
 | Directory | Data-assimilation configuration | Status |
 | --- | --- | --- |
 | [`e3smv3.0/`](e3smv3.0/README.md) | Coupled EAM and ELM; installs the required ELM SourceMods when cases are created | Maintained |
+| [`e3smv3.0_scp/`](e3smv3.0_scp/README.md) | Strongly coupled EAM and ELM; requires the `scp-dart` DART version profile | In development |
 | [`eamv3.0/`](eamv3.0/README.md) | EAM-SE only; ELM assimilation is disabled | Maintained |
 | [`eamv2.0/`](eamv2.0/) | Earlier EAM/E3SM v2 workflow using C-shell scripts | Legacy |
 

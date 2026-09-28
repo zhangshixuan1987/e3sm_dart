@@ -40,7 +40,7 @@ branch automatically.
 | Dependency | Upstream branch | Pinned commit |
 | --- | --- | --- |
 | NCAR/DART | `main` | `7bbd35a0995726b0274dc73a1b5783979d0f42d9` |
-| E3SM-Project/E3SM | `maint-3.0` | `34bd782d18dda06d2ed5945f9b276770f946f200` |
+| E3SM-Project/E3SM | `maint-3.0` | `bc1af56a9b268d4c0f5ddf166f8b9cb4b68ef799` |
 
 Update this table whenever either gitlink is deliberately advanced and tested.
 
@@ -186,6 +186,7 @@ The maintained workflows are documented in [`scripts/README.md`](../scripts/READ
 | Workflow | Purpose |
 | --- | --- |
 | [`scripts/e3smv3.0/`](../scripts/e3smv3.0/README.md) | Coupled EAM and ELM assimilation with E3SM maint-3.0 |
+| [`scripts/e3smv3.0_scp/`](../scripts/e3smv3.0_scp/README.md) | Strongly coupled EAM and ELM assimilation; requires the `scp-dart` profile |
 | [`scripts/eamv3.0/`](../scripts/eamv3.0/README.md) | EAM-SE-only assimilation with E3SM maint-3.0 |
 | `scripts/eamv2.0/` | Legacy EAM/E3SM v2 workflow retained for reference |
 

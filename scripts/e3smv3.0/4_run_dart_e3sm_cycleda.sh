@@ -49,13 +49,32 @@ validate_my_eam_cycle_overrides() {
   done
 }
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-  [[ -n "${SLURM_SUBMIT_DIR:-}" ]] || fail "SLURM_SUBMIT_DIR is unavailable"
-  my_wkdir=$(readlink -f "${SLURM_SUBMIT_DIR}") || fail "could not resolve SLURM_SUBMIT_DIR"
-else
-  SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}") || fail "could not resolve script path"
-  my_wkdir=$(dirname "${SCRIPT_PATH}")
-fi
+# Find this workflow's own directory (the one holding create_and_setup_case.sh),
+# never another workflow's:
+#  1. the directory of this script when it runs in place (including salloc);
+#  2. under sbatch Slurm runs a copy, so the submitted script's original path;
+#  3. otherwise the submission directory, with a warning.
+resolve_workflow_dir() {
+  local here cmd
+  here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || here=""
+  if [[ -n "${here}" && -r "${here}/create_and_setup_case.sh" ]]; then
+    printf '%s\n' "${here}"; return 0
+  fi
+  if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v scontrol >/dev/null 2>&1; then
+    cmd=$(scontrol show job -o "${SLURM_JOB_ID}" 2>/dev/null | sed -n 's/.* Command=\([^ ]*\).*/\1/p')
+    [[ -z "${cmd}" || "${cmd}" == /* ]] || cmd="${SLURM_SUBMIT_DIR:-.}/${cmd}"
+    if [[ -n "${cmd}" && -r "$(dirname -- "${cmd}")/create_and_setup_case.sh" ]]; then
+      (cd -- "$(dirname -- "${cmd}")" && pwd -P); return 0
+    fi
+  fi
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && -r "${SLURM_SUBMIT_DIR}/create_and_setup_case.sh" ]]; then
+    echo "WARNING: could not locate this script's own directory; using the submission directory ${SLURM_SUBMIT_DIR}" >&2
+    (cd -- "${SLURM_SUBMIT_DIR}" && pwd -P); return 0
+  fi
+  return 1
+}
+my_wkdir=$(resolve_workflow_dir) || fail "cannot find create_and_setup_case.sh next to this script or in the submission directory"
+echo "Using workflow configuration: ${my_wkdir}/create_and_setup_case.sh"
 CONFIG_FILE="${my_wkdir}/create_and_setup_case.sh"
 SCRIPT_PATH="${my_wkdir}/4_run_dart_e3sm_cycleda.sh"
 [[ -r "${SCRIPT_PATH}" ]] || fail "missing persistent cycle driver: ${SCRIPT_PATH}"

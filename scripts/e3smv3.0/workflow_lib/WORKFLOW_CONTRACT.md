@@ -1,29 +1,33 @@
-# Shared workflow behavior contract
+# Workflow behavior contract (e3smv3.0, EAM-DART)
 
-The `scp_en10` and `cpl_en40` experiments use the same active workflow engine.
-Their `create_and_setup_case.sh` files contain experiment-specific values, but
-must define the same E3SM, EAM, ELM, environment, and strongly coupled DA
-interfaces.
+`scripts/e3smv3.0/` is the EAM-DART workflow. It is a separate, self-contained
+workflow: `scripts/e3smv3.0_scp/` (strongly coupled DA) keeps its own copy of
+every script and is maintained independently. A general fix that applies to
+both workflows must be made in both directories.
+
+## Configuration
+
+Every numbered script uses the `create_and_setup_case.sh` of its own
+directory, never another workflow's. It is located, in order, from the
+directory of the running script (runs in place, including inside `salloc`),
+from the original path of an `sbatch` job's script (`scontrol`), and only then
+from the submission directory, with a warning. Each script prints the
+configuration it uses. The configuration derives all workflow paths from its
+own location.
+
+## Cycle state
 
 The shared E3SM timeline is authoritative. Before Step 4 runs, the configured
 completed-cycle count, matching completion record, restart archive, and every
 ensemble case XML timestamp must resolve to the same valid time.
 
-ELM execution mode is derived once from both coupling switches:
-
-```text
-strongly_coupled_on=on AND lnd_da_use_sequential_prior_post=.true.
-    -> sequential mode (EAM then ELM; each receives all nodes)
-otherwise
-    -> direct mode (simultaneous due components split nodes)
-```
+## Component analyses
 
 `my_eam_dart_da` and `my_elm_dart_da` independently enable the component
-analyses. Turning strongly coupled DA off does not implicitly turn ELM DA off.
-When both workflows receive equivalent configuration, they must produce the
-same cadence, component status, execution mode, node allocation, preflight,
-failure recovery, handoff, counter update, and continuation decisions.
+analyses, each on its own cadence and end time. This workflow is used with
+strongly coupled DA off (`strongly_coupled_on=off`): when both components are
+due, EAM and ELM run concurrently and split the Step 4 allocation. Strongly
+coupled DA belongs in `scripts/e3smv3.0_scp/`.
 
-The only active source difference permitted between experiment trees is the
-Step 4 Slurm walltime/node request. Runtime state, archives, configurations,
-and README files are not synchronized as engine source.
+Runtime state, archives, configurations and README files belong to this
+directory alone.

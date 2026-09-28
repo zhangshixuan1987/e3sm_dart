@@ -1,37 +1,53 @@
-# Shared workflow behavior contract
+# Workflow behavior contract (e3smv3.0_scp, strongly coupled DA)
 
-The `scp_en10` and `cpl_en40` experiments use the same active workflow engine.
-Their `create_and_setup_case.sh` files contain experiment-specific values, but
-must define the same E3SM, EAM, ELM, environment, and strongly coupled DA
-interfaces.
+`scripts/e3smv3.0_scp/` is the strongly coupled EAM–ELM workflow. It is a
+separate, self-contained workflow: `scripts/e3smv3.0/` (EAM-DART) keeps its own
+copy of every script and is maintained independently. A general fix that
+applies to both workflows must be made in both directories. This workflow
+requires the `scp-dart` version profile (`tools/checkout-version scp-dart`).
+
+## Configuration
+
+Every numbered script uses the `create_and_setup_case.sh` of its own
+directory, never another workflow's. It is located, in order, from the
+directory of the running script (runs in place, including inside `salloc`),
+from the original path of an `sbatch` job's script (`scontrol`), and only then
+from the submission directory, with a warning. Each script prints the
+configuration it uses. The configuration derives all workflow paths from its
+own location, and uses its own run path and case name (`dart_scp_test`,
+`SCPEN<n>_...`).
+
+## Cycle state
 
 The shared E3SM timeline is authoritative. Before Step 4 runs, the configured
 completed-cycle count, matching completion record, restart archive, and every
 ensemble case XML timestamp must resolve to the same valid time.
 
-ELM execution mode is derived once from both coupling switches:
-
-```text
-strongly_coupled_on=on AND lnd_da_use_sequential_prior_post=.true.
-    -> sequential mode (EAM then ELM; each receives all nodes)
-otherwise
-    -> direct mode (simultaneous due components split nodes)
-```
+## Component analyses
 
 `my_eam_dart_da` and `my_elm_dart_da` independently enable the component
-analyses. Turning strongly coupled DA off does not implicitly turn ELM DA off.
-When both workflows receive equivalent configuration, they must produce the
-same cadence, component status, execution mode, node allocation, preflight,
-failure recovery, handoff, counter update, and continuation decisions.
+analyses. With `strongly_coupled_on=on` they must share a cadence.
 
-The only active source difference permitted between experiment trees is the
-Step 4 Slurm walltime/node request. Runtime state, archives, configurations,
-and README files are not synchronized as engine source.
+- Both due, strongly coupled on: the four-pass cycle, each pass on all nodes:
+  EAM DA, EAM -> ELM, ELM DA, ELM -> EAM. Passes 1 and 3 output sequential
+  priors in `obs_seq.final`; passes 2 and 4 use them with
+  `strongly_coupled = .true.`, no inflation, the observation source's
+  `obs_kind_nml`, and their component's localization cutoff.
+- Only one component due: that component's direct pass alone, on all nodes.
+- Strongly coupled off: EAM and ELM run concurrently and split the allocation.
 
-## Strongly coupled four-pass cycle (e3smv3.0_scp)
+A failure in any pass leaves `.dart_scp_passes_in_progress` in the cycle's
+transaction directory, which forces a full forecast rebuild before the next
+attempt. Handoff and the cycle counter advance only after every due pass
+succeeds.
 
-With `strongly_coupled_on=on` and both components due, the sequential mode above
-is replaced by four passes on all nodes: EAM DA, EAM -> ELM, ELM DA, ELM -> EAM.
-Passes 1 and 3 output sequential priors; passes 2 and 4 use them with
-`strongly_coupled = .true.` and no inflation. A failure in any pass leaves
-`.dart_scp_passes_in_progress`, which forces a full forecast rebuild.
+## Initial ensemble (Step 3)
+
+EAM is perturbed with DART (`filter`, temperature). When ELM DA is on and
+`my_elm_perturb_specs` is set, ELM restarts are perturbed afterwards, while the
+Step 3 in-progress markers are still set: with DART `perturb_single_instance`
+(`my_elm_perturb_method=dart`) or, as a backup, directly
+(`my_elm_perturb_method=direct`).
+
+Runtime state, archives, configurations and README files belong to this
+directory alone.

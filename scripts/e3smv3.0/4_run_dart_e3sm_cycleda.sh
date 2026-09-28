@@ -63,6 +63,9 @@ SCRIPT_PATH="${my_wkdir}/4_run_dart_e3sm_cycleda.sh"
 source "${CONFIG_FILE}"
 [[ -n "${my_dart_env_file:-}" ]] || fail "my_dart_env_file is unset"
 [[ -r "${my_dart_env_file}" ]] || fail "configured DART environment is not readable: ${my_dart_env_file}"
+# Load it before checking commands: ncdump and the MPI/NetCDF libraries come from it.
+echo "Using configured DART machine environment: ${my_dart_env_file}"
+source "${my_dart_env_file}"
 mkdir -p "${my_log_dir}" "${my_status_dir}" "${my_lock_dir}" "${my_handoff_dir}"
 
 for cmd in awk basename cksum date dirname flock mkdir mv ncdump readlink sbatch squeue; do

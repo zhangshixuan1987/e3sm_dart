@@ -135,7 +135,6 @@ on_signal() {
   exit 143
 }
 trap on_signal INT TERM
-check_required_commands
 
 cd ${my_wkdir}
 source ./create_and_setup_case.sh
@@ -143,6 +142,8 @@ source ./create_and_setup_case.sh
 [[ -r "${my_dart_env_file}" ]] || fail "configured DART environment is not readable: ${my_dart_env_file}"
 echo "Using configured DART machine environment: ${my_dart_env_file}"
 source "${my_dart_env_file}"
+# ncdump and srun must be checked after the DART environment is loaded.
+check_required_commands
 EAM_DART_DA="${my_eam_dart_da,,}"
 ELM_DART_DA="${my_elm_dart_da,,}"
 [[ "${EAM_DART_DA}" == "on" || "${EAM_DART_DA}" == "off" ]] || fail "my_eam_dart_da must be on or off"

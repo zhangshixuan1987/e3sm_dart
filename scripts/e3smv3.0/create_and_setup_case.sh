@@ -112,7 +112,7 @@ export my_refcpl_in="${my_refdir}/${my_refcase}.cpl.r.${my_refdate}-${my_reftod}
 # --- Shared E3SM cycling controls -------------------------------------------
 # Live completed-cycle counter. Step 4 updates this value transactionally.
 ################################################################################
-export my_e3sm_completed_cycles=0
+export my_e3sm_completed_cycles=1
 export my_e3sm_cycle_hours=6
 # Fixed workflow invariant; all archive readers and writers use ENxx/archive.
 export my_dart_root="${my_modeldir}/dart_en$(printf '%02d' "${my_ensnum}")"

@@ -646,3 +646,9 @@
 &quad_interpolate_nml
    debug = 0
    /
+
+&strongly_coupled_localization_nml
+   strongly_coupled = .false.
+   state_model      = 'Atmosphere'
+   obs_model        = 'Atmosphere'
+   /

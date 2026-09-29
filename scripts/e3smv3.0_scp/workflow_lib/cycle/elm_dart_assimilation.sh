@@ -61,11 +61,15 @@ elm_configure_namelist() {
       "${nml}" || return 1
 
     sed -i "/^[[:space:]]*perturbation_amplitude[[:space:]]*=/a\\   perturbation_method = '${lnd_da_perturbation_method}'\\n   output_sequential_prior_post = ${lnd_da_output_sequential_prior_post}\\n   use_sequential_prior_post = ${lnd_da_use_sequential_prior_post}" "${nml}" || return 1
-    if grep -Eiq '^[[:space:]]*&strongly_coupled_localization_nml' "${nml}"; then
-      elm_fail "input.nml already defines strongly_coupled_localization_nml; refusing to create a duplicate group"
-      return 1
+    # The strongly coupled DART always reads &strongly_coupled_localization_nml;
+    # the template provides it, and each pass sets its values here.
+    source "${my_workflow_lib:?}/common/namelist_tools.sh"
+    if ! nml_print_group "${nml}" strongly_coupled_localization_nml | grep -q .; then
+      printf '\n&strongly_coupled_localization_nml\n   /\n' >> "${nml}" || return 1
     fi
-    printf '\n&strongly_coupled_localization_nml\n   strongly_coupled = %s\n   state_model = '\''%s'\''\n   obs_model = '\''%s'\''\n   /\n' "${lnd_da_strongly_coupled}" "${lnd_da_state_model}" "${lnd_da_obs_model}" >> "${nml}" || return 1
+    nml_set_value "${nml}" strongly_coupled_localization_nml strongly_coupled "${lnd_da_strongly_coupled}" || return 1
+    nml_set_value "${nml}" strongly_coupled_localization_nml state_model "'${lnd_da_state_model}'" || return 1
+    nml_set_value "${nml}" strongly_coupled_localization_nml obs_model "'${lnd_da_obs_model}'" || return 1
 
     grep -Eq "^[[:space:]]*ens_size[[:space:]]*=[[:space:]]*${my_ensnum}" "${nml}" || return 1
     grep -Eq "^[[:space:]]*assimilation_period_days[[:space:]]*=[[:space:]]*${period_days}" "${nml}" || return 1

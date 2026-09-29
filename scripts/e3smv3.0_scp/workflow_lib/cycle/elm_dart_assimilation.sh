@@ -258,6 +258,17 @@ if [[ -n "${ELM_OBS_KIND_SOURCE:-}" ]]; then
   source "${my_workflow_lib:?}/common/namelist_tools.sh"
   nml_replace_group "${ELM_DADIR}/input.nml" obs_kind_nml "${ELM_OBS_KIND_SOURCE}" || elm_fail "could not set observation types" || return 1
   echo "Observation types taken from ${ELM_OBS_KIND_SOURCE}"
+  # Optionally keep only a subset; each type must be one the source assimilates.
+  if [[ -n "${ELM_OBS_TYPES:-}" ]]; then
+    source_types=$(nml_print_group "${ELM_OBS_KIND_SOURCE}" obs_kind_nml | awk '/evaluate_these_obs_types/ {exit} {print}')
+    obs_type_list=""
+    for obs_type in ${ELM_OBS_TYPES}; do
+      grep -q "'${obs_type}'" <<< "${source_types}" || elm_fail "${obs_type} is not assimilated in ${ELM_OBS_KIND_SOURCE}" || return 1
+      obs_type_list+="${obs_type_list:+, }'${obs_type}'"
+    done
+    nml_set_value "${ELM_DADIR}/input.nml" obs_kind_nml assimilate_these_obs_types "${obs_type_list}" || elm_fail "could not set observation types" || return 1
+    echo "Observation types restricted to: ${ELM_OBS_TYPES}"
+  fi
 fi
 ln -s "${ELM_OBS}" "${ELM_DADIR}/${ELM_OBS_LINK_NAME}" || return 1
 for executable in filter elm_to_dart; do

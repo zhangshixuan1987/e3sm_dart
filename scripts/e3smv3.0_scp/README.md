@@ -496,7 +496,10 @@ each starting from the previous pass's in-place analysis:
   without inflation, so only the direct passes adapt and store inflation.
 - Each pass uses its component's localization cutoff. Cross passes take
   `&obs_kind_nml` from the observation source's template, so pass 2 assimilates
-  the EAM observation types and pass 4 the ELM types. Both DART interfaces must
+  the EAM observation types and pass 4 the ELM types. `my_eam_to_elm_obs_types`
+  narrows pass 2 to a subset of the EAM types (default
+  `RADIOSONDE_TEMPERATURE RADIOSONDE_SPECIFIC_HUMIDITY`; empty keeps them all).
+  Both DART interfaces must
   therefore be built with atmospheric and land observation definitions (see
   `models/eam-se/work_scp/input.nml` and `models/elm/work_scp/input.nml`).
 - Logs: `runtmp/logs/assim.scp.<job>.cycle<N>.pass{1..4}.log`.

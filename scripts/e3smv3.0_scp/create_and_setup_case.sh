@@ -207,6 +207,9 @@ export my_elm_grid_history_file="/pscratch/sd/z/zhan391/e3sm_dart/dart_test/DART
 # values below are the direct-pass defaults, used when only one component is due.
 ################################################################################
 export strongly_coupled_on="on"
+# Pass 2 (EAM -> ELM) assimilates only these atmospheric observation types;
+# each must be listed in the EAM filter.nml obs_kind_nml. Empty = all of them.
+export my_eam_to_elm_obs_types="RADIOSONDE_TEMPERATURE RADIOSONDE_SPECIFIC_HUMIDITY"
 
 export atm_da_compute_posterior=".false."
 export atm_da_output_sequential_prior_post=".false."

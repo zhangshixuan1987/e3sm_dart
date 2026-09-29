@@ -1071,11 +1071,11 @@ run_scp_four_pass() {
     lnd_da_output_sequential_prior_post=.false. lnd_da_use_sequential_prior_post=.true. \
     lnd_da_strongly_coupled=.true. lnd_da_state_model=Land lnd_da_obs_model=Atmosphere \
     lnd_da_inf_flavor_prior=0 lnd_da_inf_flavor_posterior=0 \
-    ELM_PASS_TAG=eam_to_elm ELM_OBS_KIND_SOURCE="${my_eam_filter_nml}"
+    ELM_PASS_TAG=eam_to_elm ELM_OBS_KIND_SOURCE="${my_eam_filter_nml}" ELM_OBS_TYPES="${my_eam_to_elm_obs_types:-}"
   scp_pass 3 elm "${log_prefix}.pass3.log" \
     lnd_da_output_sequential_prior_post=.true. lnd_da_use_sequential_prior_post=.false. \
     lnd_da_strongly_coupled=.false. lnd_da_state_model=Land lnd_da_obs_model=Land \
-    ELM_PASS_TAG= ELM_OBS_KIND_SOURCE=
+    ELM_PASS_TAG= ELM_OBS_KIND_SOURCE= ELM_OBS_TYPES=
   scp_pass 4 eam "${log_prefix}.pass4.log" \
     atm_da_output_sequential_prior_post=.false. atm_da_use_sequential_prior_post=.true. \
     atm_da_strongly_coupled=.true. atm_da_state_model=Atmosphere atm_da_obs_model=Land \

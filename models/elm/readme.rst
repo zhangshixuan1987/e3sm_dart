@@ -217,7 +217,7 @@ points are:
 +------------------------------------+-----------------------------------------------------------+
 | ``2_run_dart_e3sm_icbc.sh``        | Prepare and validate coupled initial conditions.          |
 +------------------------------------+-----------------------------------------------------------+
-| ``3_run_dart_eam_perturb.sh``      | Create the initial EAM ensemble perturbations.            |
+| ``3_run_dart_e3sm_perturb.sh``     | Create the initial EAM and ELM ensemble perturbations.    |
 +------------------------------------+-----------------------------------------------------------+
 | ``4_run_dart_e3sm_cycleda.sh``     | Run restart-safe coupled forecast-assimilation cycles.    |
 +------------------------------------+-----------------------------------------------------------+

@@ -59,7 +59,7 @@ each assimilation cycle can select and validate one exact-time record.
    ```bash
    sbatch 1_run_e3sm_ensemble_setup.sh
    sbatch 2_run_dart_e3sm_icbc.sh
-   sbatch 3_run_dart_eam_perturb.sh
+   sbatch 3_run_dart_e3sm_perturb.sh
    sbatch 4_run_dart_e3sm_cycleda.sh
    ```
 
@@ -100,7 +100,7 @@ Steps 1–4 form the core cycling workflow. Steps 5–8 are post-cycle utilities
 .
 ├── 1_run_e3sm_ensemble_setup.sh
 ├── 2_run_dart_e3sm_icbc.sh
-├── 3_run_dart_eam_perturb.sh
+├── 3_run_dart_e3sm_perturb.sh
 ├── 4_run_dart_e3sm_cycleda.sh
 ├── 5_run_dart_compress.sh
 ├── 6_run_dart_diag.sh
@@ -218,7 +218,7 @@ runtmp/status/icbc_complete.<valid-time>
 ### Step 3 — Initial perturbation
 
 ```bash
-sbatch 3_run_dart_eam_perturb.sh
+sbatch 3_run_dart_e3sm_perturb.sh
 ```
 
 Step 3 requires the matching Step 2 record. It calculates DART tasks from the actual Slurm node allocation and `my_task_per_node`, perturbs the initial ensemble, validates the result, and writes:
@@ -349,7 +349,7 @@ A Slurm `afterok` dependency can be used for Steps 1–3, but it does not replac
 ```bash
 job1=$(sbatch --parsable 1_run_e3sm_ensemble_setup.sh)
 job2=$(sbatch --parsable --dependency="afterok:${job1}" 2_run_dart_e3sm_icbc.sh)
-job3=$(sbatch --parsable --dependency="afterok:${job2}" 3_run_dart_eam_perturb.sh)
+job3=$(sbatch --parsable --dependency="afterok:${job2}" 3_run_dart_e3sm_perturb.sh)
 sbatch --dependency="afterok:${job3}" 4_run_dart_e3sm_cycleda.sh
 ```
 

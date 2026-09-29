@@ -215,7 +215,7 @@ mkdir -p runtmp/logs
 
 sbatch 1_run_e3sm_ensemble_setup.sh
 sbatch 2_run_dart_e3sm_icbc.sh
-sbatch 3_run_dart_eam_perturb.sh
+sbatch 3_run_dart_e3sm_perturb.sh   # 3_run_dart_eam_perturb.sh in scripts/eamv3.0
 sbatch 4_run_dart_e3sm_cycleda.sh
 ```
 

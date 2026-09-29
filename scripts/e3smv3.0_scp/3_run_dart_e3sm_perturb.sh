@@ -136,6 +136,10 @@ if [[ "${my_elm_dart_da,,}" == "on" && -n "${my_elm_perturb_specs:-}" ]]; then
          check_dart_build "$(dirname "${ELM_PERTURB_EXE}")" || fail "the ELM DART build does not match this workflow's DART version"
          [[ -s "${my_elm_grid_history_file:-}" ]] || fail "my_elm_grid_history_file must name an ELM history file on this land grid: ${my_elm_grid_history_file:-unset}"
          [[ -s "${my_elm_filter_nml:-}" ]] || fail "missing ELM filter namelist template: ${my_elm_filter_nml:-unset}"
+         case "${my_elm_perturb_calendar:-}" in
+            NOLEAP|GREGORIAN|JULIAN|THIRTY_DAY_MONTHS) ;;
+            *) fail "my_elm_perturb_calendar must be NOLEAP, GREGORIAN, JULIAN or THIRTY_DAY_MONTHS, got: ${my_elm_perturb_calendar:-unset}" ;;
+         esac
          ;;
       direct) ;;
       *) fail "my_elm_perturb_method must be dart or direct, got: ${my_elm_perturb_method}" ;;
@@ -217,7 +221,7 @@ case ${my_machine} in
 
 esac
 
-echo "`date` -- START EAM_DART_PERTURBATION"
+echo "`date` -- START E3SM_DART_PERTURBATION"
 
 # ==============================================================================
 # Block 0: Set command environment
@@ -226,7 +230,7 @@ echo "`date` -- START EAM_DART_PERTURBATION"
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
 
-echo "`date` -- BEGIN EAM_ASSIMILATE"
+echo "`date` -- BEGIN EAM_PERTURBATION"
 
 # ==============================================================================
 # Make sure the DART executables exist or build them if we can't find them.
@@ -1045,6 +1049,9 @@ perturb_elm_with_dart() {
    nml_set_value input.nml model_nml elm_variables "${rows}" || return 1
    nml_set_value input.nml model_nml elm_restart_filename "'elm_restart.nc'" || return 1
    nml_set_value input.nml model_nml elm_history_filename "'elm_history.nc'" || return 1
+   # Step 2 restarts can keep the spin-up model date, so the calendar comes
+   # from my_elm_perturb_calendar rather than the cycling template.
+   nml_set_value input.nml model_nml calendar "'${my_elm_perturb_calendar}'" || return 1
    nml_set_value input.nml model_nml custom_routine_to_generate_ensemble ".true." || return 1
    nml_set_value input.nml model_nml fields_to_perturb "${fields}" || return 1
    nml_set_value input.nml model_nml perturbation_amplitude "${amps}" || return 1
@@ -1114,7 +1121,7 @@ for member_marker in "${PERTURB_MARKERS[@]}"; do
 done
 echo "Validated all ${DART_ENSNUM} perturbed ensemble members"
 echo "Wrote step-3 completion record: ${perturb_status}"
-echo "`date` -- END EAM_DART_PERTURBATION"
+echo "`date` -- END E3SM_DART_PERTURBATION"
 
 # Ensure the removal of unneeded restart sets and copy of obs_seq.final are finished.
 wait

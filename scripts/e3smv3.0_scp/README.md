@@ -255,8 +255,12 @@ non-negative, `abs` is in native units). The default perturbs `H2OSOI_LIQ` and
   member. Only soil levels of vegetated/bare-soil and crop columns change.
   Because no ELM history exists before the first forecast,
   `my_elm_grid_history_file` must name an ELM history file on the same land
-  grid; it supplies only the grid. Requires `perturb_single_instance` in the
-  ELM build (`models/elm/work_scp/quickbuild.sh`).
+  grid; it supplies only the grid. `my_elm_perturb_calendar` (default
+  `NOLEAP`, ELM's own calendar) is the DART calendar used to read the restart
+  date: Step 2 restarts can keep the spin-up date (e.g. year 0384), which
+  `GREGORIAN` rejects because it only allows years from 1601. Requires
+  `perturb_single_instance` in the ELM build
+  (`models/elm/work_scp/quickbuild.sh`).
 - `direct` (backup): `workflow_lib/perturb/elm_perturb_restart.py` edits the
   restarts with the E3SM-Unified environment. Only soil levels change, on all
   columns; the random stream depends on `my_elm_perturb_seed`, the member and

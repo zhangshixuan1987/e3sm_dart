@@ -189,6 +189,11 @@ export my_elm_perturb_seed=20111101
 # direct: backup; workflow_lib/perturb/elm_perturb_restart.py edits the restarts
 #         (soil levels only, all columns; my_elm_perturb_seed sets the stream).
 export my_elm_perturb_method="dart"
+# DART calendar used to read the model date in the Step 3 ELM restarts (dart
+# method only). Step 2 restarts can keep the spin-up date (e.g. year 0384),
+# which GREGORIAN rejects (years >= 1601 only); ELM itself runs on NOLEAP.
+# Allowed: NOLEAP, GREGORIAN, JULIAN, THIRTY_DAY_MONTHS.
+export my_elm_perturb_calendar="NOLEAP"
 export my_elm_grid_history_file="/pscratch/sd/z/zhan391/e3sm_dart/dart_test/DARTEN4_WCYCL20TR_ne30pg2_r05_IcoswISC30E3r5_pm-cpu/EN01/archive/lnd/hist/DARTEN4_WCYCL20TR_ne30pg2_r05_IcoswISC30E3r5_pm-cpu.EN01.elm.h1.2011-11-01-00000.nc"
 
 ################################################################################

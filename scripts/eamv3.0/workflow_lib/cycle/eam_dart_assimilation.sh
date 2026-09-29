@@ -1,10 +1,10 @@
 #!/bin/bash -el
-#For cshell:
-#limit stacksize unlimited
-#limit datasize unlimited
-#For bash
-#ulimit -s unlimited
-#ulimit -d unlimited
+# DART (Intel Fortran) keeps large per-task work arrays on the stack; the default
+# 8 MB limit makes filter crash with SIGSEGV. srun passes this limit to every task.
+ulimit -s unlimited 2>/dev/null || {
+  ulimit -s "$(ulimit -Hs)"
+  echo "WARNING: stack limit capped at $(ulimit -s) KB by this machine; filter may crash if it needs more" >&2
+}
 
 # ---------------------
 # Purpose
@@ -18,7 +18,7 @@ WORK_DIR=`pwd`
 DART_ROOT=${my_eam_dart_code}
 DART_MODEL=${my_eam_dart_model}
 DART_SCPTDIR=${DART_ROOT}/models/${DART_MODEL}/shell_scripts
-DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/work
+DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
 BASE_OBSDIR=${my_eam_dart_obsdir}
 BASE_PHIS=${my_eam_topography_file}
 BASE_SEMAPS=${my_eam_se_mapping_file}
@@ -49,36 +49,16 @@ cs_grid_file="SEMapping_cs_grid.nc"
 # machine-specific dereferencing
 # suppress "rm" warnings if wildcard does not match anything
 nonomatch=1
+source "${my_workflow_lib:?}/common/file_commands.sh"
 case ${my_machine} in
         "compy")
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm -fr'
-                LAUNCHCMD="srun --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
+                LAUNCHCMD="srun --propagate=STACK --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
                 ;;
         "pm-cpu")
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm'
-                LAUNCHCMD=mpirun.lsf
+                LAUNCHCMD="srun --propagate=STACK --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --kill-on-bad-exit -l --cpu-bind=cores -c 2 -m plane=${my_task_per_node}"
                 ;;
          *)
-                VERBOSE='-v'
-                MOVE='/usr/bin/mv'
-                COPY='/usr/bin/cp --preserve=timestamps'
-                LINK='/usr/bin/ln -fs'
-                LINKV=TRUE
-                LIST='/usr/bin/ls'
-                REMOVE='/usr/bin/rm -fr'
-                LAUNCHCMD="srun --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
+                LAUNCHCMD="srun --propagate=STACK --exclusive --nodes=${DART_NNODES} --ntasks=${DART_NTASKS} --mpi=pmi2 --kill-on-bad-exit -l --cpu_bind=cores -c 1 -m plane=${my_task_per_node}"
                 ;;
 
 esac
@@ -104,7 +84,7 @@ scomp=`./xmlquery COMP_ATM             --value`
 # The DART input.nml in the model directory IS IMPORTANT during this part
 # because it defines what observation types are supported.
 # ==============================================================================
-targetdir=${DART_ROOT}/models/${DART_MODEL}/work
+targetdir=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
 if [ ! -x ${targetdir}/filter ]; then
    echo ""
    echo "WARNING: executable file 'filter' not found."
@@ -281,30 +261,6 @@ else
   exit 05
 fi
 
-# Validate the optional strongly coupled DA setup before editing input.nml.
-apply_strongly_coupled_setup=FALSE
-case "${strongly_coupled_on,,}" in
-  on)
-    for logical_value in "${atm_da_compute_posterior}" "${atm_da_output_sequential_prior_post}" "${atm_da_use_sequential_prior_post}" "${atm_da_output_mean}" "${atm_da_output_sd}" "${atm_da_output_members}" "${atm_da_strongly_coupled}"; do
-      [[ "${logical_value}" =~ ^\.(true|false)\.$ ]] || { echo "ERROR: invalid Fortran logical in strongly coupled DA configuration: ${logical_value}"; exit 45; }
-    done
-    case "${atm_da_state_model}:${atm_da_obs_model}" in
-      Atmosphere:Atmosphere|Atmosphere:Land|Land:Atmosphere|Land:Land) ;;
-      *) echo "ERROR: strongly coupled state/obs models must each be Atmosphere or Land"; exit 45 ;;
-    esac
-    for required_key in compute_posterior output_sequential_prior_post use_sequential_prior_post output_mean output_sd output_members strongly_coupled state_model obs_model; do
-      grep -Eq "^[[:space:]]*${required_key}[[:space:]]*=" input.nml || { echo "ERROR: input.nml does not contain required setting: ${required_key}"; exit 45; }
-    done
-    apply_strongly_coupled_setup=TRUE
-    ;;
-  off)
-    echo "Strongly coupled DA setup disabled; retaining source namelist values"
-    ;;
-  *)
-    echo "ERROR: strongly_coupled_on must be on or off, got: ${strongly_coupled_on:-unset}"
-    exit 45
-    ;;
-esac
 # This file is needed by recent DART versions.
 if [ -e "${DART_WORKDIR}/qceff_table.csv" ]; then
   ${COPY} ${DART_WORKDIR}/qceff_table.csv qceff_table.csv || exit 06
@@ -342,21 +298,6 @@ grep -Eq "^[[:space:]]*vert_normalization_scale_height[[:space:]]*=[[:space:]]*$
   exit 44
 }
 
-if [[ "${apply_strongly_coupled_setup}" == "TRUE" ]]; then
-ex input.nml <<ex_end
-g;compute_posterior ;s;= .*;= ${atm_da_compute_posterior};
-g;output_sequential_prior_post ;s;= .*;= ${atm_da_output_sequential_prior_post};
-g;use_sequential_prior_post ;s;= .*;= ${atm_da_use_sequential_prior_post};
-g;output_mean ;s;= .*;= ${atm_da_output_mean};
-g;output_sd ;s;= .*;= ${atm_da_output_sd};
-g;output_members ;s;= .*;= ${atm_da_output_members};
-g;strongly_coupled ;s;= .*;= ${atm_da_strongly_coupled};
-g;state_model ;s;= .*;= '${atm_da_state_model}';
-g;obs_model ;s;= .*;= '${atm_da_obs_model}';
-wq
-ex_end
-  echo "Strongly coupled DA setup enabled: state=${atm_da_state_model}, obs=${atm_da_obs_model}"
-fi
 
 list=`grep '^[ ]*vertical_localization_coord' input.nml`
 list=( `echo $list | sed -e "s#[=,']# #g"` )

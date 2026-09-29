@@ -240,7 +240,7 @@ cat << EOF >> user_nl_eam
 EOF
 
 cat << EOF >> user_nl_elm
- hist_dov2xy = .true.,.true.,.false.,
+ hist_dov2xy = .true.
  hist_fexcl1 = 'AGWDNPP','ALTMAX_LASTYEAR','AVAIL_RETRANSP','AVAILC','BAF_CROP',
                'BAF_PEATF','BIOCHEM_PMIN_TO_PLANT','CH4_SURF_AERE_SAT','CH4_SURF_AERE_UNSAT','CH4_SURF_DIFF_SAT',
                'CH4_SURF_DIFF_UNSAT','CH4_SURF_EBUL_SAT','CH4_SURF_EBUL_UNSAT','CMASS_BALANCE_ERROR','cn_scalar',
@@ -278,20 +278,9 @@ cat << EOF >> user_nl_elm
 
  hist_fincl1 = 'SNOWDP','COL_FIRE_CLOSS','NPOOL','PPOOL','TOTPRODC'
 
- hist_fincl2 = 'H2OSNO', 'FSNO', 'QRUNOFF', 'QSNOMELT', 'FSNO_EFF', 'SNORDSL', 'SNOW',
-               'FSA', 'FSDS', 'FSR', 'FLDS', 'FIRE', 'FIRA', 'SOILWATER_10CM',
-               'SOILLIQ', 'SOILICE', 'QSOIL', 'U10', 'U10WITHGUSTS', 'TSOI_10CM',
-               'TSA', 'THBOT', 'TAUX', 'TAUY', 'FSH', 'HC', 'HCSOI', 'EFLX_LH_TOT',
-               'SNOW_DEPTH', 'RH2M', 'RAIN', 'QVEGE', 'QVEGT', 'QBOT', 'Q2M', 'H2OSFC',
-               'ZWT', 'ZBOT', 'TBOT', 'TG', 'PBOT', 'TSOI', 'TSOI_ICE', 'SOILLIQ_ICE',
-               'SOILICE_ICE', 'NEP', 'H2OSOI', 'SMINN_vr', 'LITR1N_vr', 'FSDSVDLN',
-               'FSDSVILN', 'PARVEGLN', 'NEE', 'TLAI', 'TWS', 'SMP'
-
- hist_fincl3 = 'NEE', 'TLAI', 'TWS', 'SMP', 'H2OSNO', 'RH2M_R', 'TV', 'PBOT', 'TBOT'
-
- hist_mfilt = 1,1,1
- hist_nhtfrq = 0,-6,-6
- hist_avgflag_pertape = 'A','I','I'
+ hist_mfilt = 1
+ hist_nhtfrq = 0
+ hist_avgflag_pertape = 'A'
 
  check_finidat_year_consistency = .false.
  check_dynpft_consistency = .false.
@@ -334,6 +323,8 @@ EOF
 # =====================================
 
 patch_mpas_streams() {
+local din
+din=$(cd ${CASE_SCRIPTS_DIR} && ./xmlquery DIN_LOC_ROOT --value)
 echo
 echo 'Modifying MPAS streams files'
 pushd ${CASE_RUN_DIR}
@@ -342,7 +333,7 @@ patch streams.seaice << EOF
 --- streams.seaice
 +++ streams.seaice
 @@ -11,1 +11,1 @@
--                  filename_template="/compyfs/inputdata/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.20231120.nc"
+-                  filename_template="${din}/ice/mpas-seaice/IcoswISC30E3r5/mpassi.IcoswISC30E3r5.20231120.nc"
 +                  filename_template="${ice_init}"
 @@ -34,1 +34,8 @@
 -

@@ -77,7 +77,7 @@ compute_cycle_state_time() {
 check_required_vars() {
   local var
   local missing=0
-  for var in my_job_nnodes my_ensnum my_modeldir my_casename my_e3sm_cycle_hours my_eam_dart_cycle_hours my_elm_dart_cycle_hours my_eam_dart_run_dir my_elm_dart_run_dir my_eam_dart_end_date my_eam_dart_end_tod my_elm_dart_end_date my_elm_dart_end_tod my_e3sm_completed_cycles; do
+  for var in my_job_nnodes my_ensnum my_modeldir my_casename my_e3sm_cycle_hours my_eam_dart_cycle_hours my_eam_dart_run_dir my_eam_dart_end_date my_eam_dart_end_tod my_e3sm_completed_cycles; do
     if [[ -z "${!var:-}" ]]; then
       echo "ERROR: required variable is unset or empty: ${var}"
       missing=1
@@ -135,7 +135,6 @@ on_signal() {
   exit 143
 }
 trap on_signal INT TERM
-check_required_commands
 
 cd ${my_wkdir}
 source ./create_and_setup_case.sh
@@ -143,11 +142,15 @@ source ./create_and_setup_case.sh
 [[ -r "${my_dart_env_file}" ]] || fail "configured DART environment is not readable: ${my_dart_env_file}"
 echo "Using configured DART machine environment: ${my_dart_env_file}"
 source "${my_dart_env_file}"
+# ncdump and srun must be checked after the DART environment is loaded.
+check_required_commands
 EAM_DART_DA="${my_eam_dart_da,,}"
-ELM_DART_DA="${my_elm_dart_da,,}"
 [[ "${EAM_DART_DA}" == "on" || "${EAM_DART_DA}" == "off" ]] || fail "my_eam_dart_da must be on or off"
-[[ "${ELM_DART_DA}" == "on" || "${ELM_DART_DA}" == "off" ]] || fail "my_elm_dart_da must be on or off"
-echo "Component DA modes: EAM=${EAM_DART_DA}, ELM=${ELM_DART_DA}"
+echo "EAM DA mode: ${EAM_DART_DA} (EAM-only workflow; ELM runs as a model component without DA)"
+source "${my_workflow_lib:?}/common/dart_build.sh"
+if [[ "${EAM_DART_DA}" == "on" ]]; then
+  check_dart_build "${my_eam_dart_code}/models/${my_eam_dart_model}/${my_dart_build_dir_name:?}" || fail "the EAM DART build does not match this workflow's DART version"
+fi
 
 
 LOG_DIR="${my_log_dir}"
@@ -188,21 +191,14 @@ DATA_ASSIMILATION_CYCLES=${my_e3sm_completed_cycles}
 DATA_ASSIMILATION_WINDOW=${my_e3sm_cycle_hours}
 validate_positive_int "my_e3sm_cycle_hours" "${my_e3sm_cycle_hours}"
 validate_positive_int "my_eam_dart_cycle_hours" "${my_eam_dart_cycle_hours}"
-validate_positive_int "my_elm_dart_cycle_hours" "${my_elm_dart_cycle_hours}"
 (( my_eam_dart_cycle_hours % my_e3sm_cycle_hours == 0 )) || fail "my_eam_dart_cycle_hours must be an integer multiple of my_e3sm_cycle_hours"
-(( my_elm_dart_cycle_hours % my_e3sm_cycle_hours == 0 )) || fail "my_elm_dart_cycle_hours must be an integer multiple of my_e3sm_cycle_hours"
 TARGET_ELAPSED_HOURS=$(((DATA_ASSIMILATION_CYCLES + 1) * my_e3sm_cycle_hours))
 EAM_DART_RUN="off"
-ELM_DART_RUN="off"
 if [[ "${EAM_DART_DA}" == "on" ]]; then
   EAM_DART_RUN="not_due"
   (( TARGET_ELAPSED_HOURS % my_eam_dart_cycle_hours != 0 )) || EAM_DART_RUN="on"
 fi
-if [[ "${ELM_DART_DA}" == "on" ]]; then
-  ELM_DART_RUN="not_due"
-  (( TARGET_ELAPSED_HOURS % my_elm_dart_cycle_hours != 0 )) || ELM_DART_RUN="on"
-fi
-echo "Component DA schedule at +${TARGET_ELAPSED_HOURS}h: EAM=${EAM_DART_RUN}, ELM=${ELM_DART_RUN}"
+echo "EAM DA schedule at +${TARGET_ELAPSED_HOURS}h: ${EAM_DART_RUN}"
 
 CASE_ROOT=${my_modeldir}/EN01/case_scripts
 RUN_ROOT=${my_modeldir}/EN01/run
@@ -243,19 +239,14 @@ DA_TARGET_YMD=`printf "%04d" ${DA_TARGET_YEAR}`-`printf "%02d" ${DA_TARGET_MONTH
 DA_TARGET_TOD=`printf "%05d" ${DA_TARGET_SECONDS}`
 TARGET_STAMP="${DA_TARGET_YMD//-/}${DA_TARGET_TOD}"
 EAM_END_STAMP="${my_eam_dart_end_date//-/}${my_eam_dart_end_tod}"
-ELM_END_STAMP="${my_elm_dart_end_date//-/}${my_elm_dart_end_tod}"
 if [[ "${EAM_DART_DA}" == "on" ]] && (( 10#${TARGET_STAMP} > 10#${EAM_END_STAMP} )); then
   EAM_DART_RUN="ended"
 fi
-if [[ "${ELM_DART_DA}" == "on" ]] && (( 10#${TARGET_STAMP} > 10#${ELM_END_STAMP} )); then
-  ELM_DART_RUN="ended"
-fi
-echo "Component DA window at ${DA_TARGET_YMD}-${DA_TARGET_TOD}: EAM=${EAM_DART_RUN}, ELM=${ELM_DART_RUN}"
+echo "EAM DA window at ${DA_TARGET_YMD}-${DA_TARGET_TOD}: ${EAM_DART_RUN}"
 DA_TRANSACTION_DIR="${my_dart_root}/transactions/${DA_TARGET_YMD}-${DA_TARGET_TOD}"
 STALE_DART_MARKER="${DA_TRANSACTION_DIR}/.dart_filter_in_progress"
-STALE_ELM_DART_MARKER="${DA_TRANSACTION_DIR}/.dart_elm_filter_in_progress"
-if [[ -e "${STALE_DART_MARKER}" || -e "${STALE_ELM_DART_MARKER}" ]]; then
-  echo "WARNING: previous EAM or ELM DART attempt did not finish cleanly"
+if [[ -e "${STALE_DART_MARKER}" ]]; then
+  echo "WARNING: previous EAM DART attempt did not finish cleanly"
   echo "WARNING: forcing a rebuild of every forecast member before retrying DART"
   SKIP_COMPLETED_MEMBERS="FALSE"
 fi
@@ -552,7 +543,7 @@ repair_invalid_locked_files() {
 }
 
 preflight_cycle_inputs() {
-  local dart_workdir="${my_eam_dart_code}/models/${my_eam_dart_model}/work"
+  local dart_workdir="${my_eam_dart_code}/models/${my_eam_dart_model}/${my_dart_build_dir_name:?}"
   local yyyymm obs_file i enstr case_name ref_dir run_dir input_file
   local required_files=()
 
@@ -602,8 +593,21 @@ preflight_cycle_inputs
 if (( my_job_nnodes % NODES_PER_MEMBER != 0 )); then
   fail "my_job_nnodes (${my_job_nnodes}) must be divisible by ${NODES_PER_MEMBER}"
 fi
+# The member cases' PE layout (fixed by my_layout in Step 1) must match
+# my_nodes_per_member; otherwise concurrent members oversubscribe the allocation.
+# Members are clones of one case, so EN01 represents them all.
+member_totalpes=$(cd "${CASE_ROOT}" && ./xmlquery TOTALPES --value) || fail "could not query TOTALPES from ${CASE_ROOT}"
+member_tasks_per_node=$(cd "${CASE_ROOT}" && ./xmlquery MAX_TASKS_PER_NODE --value) || fail "could not query MAX_TASKS_PER_NODE from ${CASE_ROOT}"
+validate_positive_int "TOTALPES" "${member_totalpes}"
+validate_positive_int "MAX_TASKS_PER_NODE" "${member_tasks_per_node}"
+member_nodes_needed=$(( (member_totalpes + member_tasks_per_node - 1) / member_tasks_per_node ))
+if (( member_nodes_needed != NODES_PER_MEMBER )); then
+  fail "member cases use ${member_totalpes} PEs (${member_nodes_needed} node(s) at ${member_tasks_per_node} tasks/node) but my_nodes_per_member=${NODES_PER_MEMBER}; set my_nodes_per_member=${member_nodes_needed} or rebuild the cases with a matching my_layout"
+fi
+
 BATCH_SIZE=$((my_job_nnodes / NODES_PER_MEMBER))
 (( BATCH_SIZE >= 1 )) || fail "invalid forecast batch size: ${BATCH_SIZE}"
+echo "Forecast layout: ${member_nodes_needed} node(s) per member, ${BATCH_SIZE} member(s) per wave on ${my_job_nnodes} node(s)"
 
 prepare_member() (
   local i="$1"
@@ -952,7 +956,7 @@ FORECAST_READY_FOR_DA="TRUE"
 
 # Stale component markers are cleared only after every forecast member has
 # been rebuilt and validated. Each assimilation creates its own fresh marker.
-for stale_marker in "${STALE_DART_MARKER}" "${STALE_ELM_DART_MARKER}"; do
+for stale_marker in "${STALE_DART_MARKER}"; do
   if [[ -e "${stale_marker}" ]]; then
     rm -f "${stale_marker}" || fail "could not clear stale DART marker after forecast recovery: ${stale_marker}"
     echo "Cleared stale marker after validating the regenerated forecast ensemble: ${stale_marker}"
@@ -963,108 +967,33 @@ if [[ "${FORECAST_READY_FOR_DA}" != "TRUE" ]]; then
   fail "forecast readiness check failed; aborting before DA step"
 fi
 
-# Run only component analyses due at this valid time. When both are due they use the
-# equal halves of the allocation; a single enabled component receives all nodes.
+# Run the EAM analysis when it is due at this valid time; it uses every node.
 DART_YEAR=${DA_TARGET_YEAR}
 DART_MONTH=${DA_TARGET_MONTH}
 DART_DAY=${DA_TARGET_DAY}
 DART_HOUR=${DA_TARGET_HOUR}
 DART_SECONDS=${DA_TARGET_SECONDS}
 DA_VALID_TIME="${DA_TARGET_YMD}-${DA_TARGET_TOD}"
-ELM_USES_SEQUENTIAL_PRIOR="FALSE"
-if [[ "${strongly_coupled_on,,}" == "on" && "${lnd_da_use_sequential_prior_post,,}" == ".true." ]]; then
-  ELM_USES_SEQUENTIAL_PRIOR="TRUE"
-fi
-if [[ "${EAM_DART_RUN}" == "on" && "${ELM_DART_RUN}" == "on" ]]; then
-  if [[ "${ELM_USES_SEQUENTIAL_PRIOR}" == "TRUE" ]]; then
-    my_eam_dart_nnodes=${my_job_nnodes}
-    my_elm_dart_nnodes=${my_job_nnodes}
-  else
-    my_eam_dart_nnodes=$((my_job_nnodes / 2))
-    my_elm_dart_nnodes=$((my_job_nnodes / 2))
-  fi
-elif [[ "${EAM_DART_RUN}" == "on" ]]; then
-  my_eam_dart_nnodes=${my_job_nnodes}
-  my_elm_dart_nnodes=0
-elif [[ "${ELM_DART_RUN}" == "on" ]]; then
-  my_eam_dart_nnodes=0
-  my_elm_dart_nnodes=${my_job_nnodes}
-else
-  my_eam_dart_nnodes=0
-  my_elm_dart_nnodes=0
-fi
-echo "DA valid time: ${DA_VALID_TIME}; EAM=${EAM_DART_RUN} (${my_eam_dart_nnodes} nodes); ELM=${ELM_DART_RUN} (${my_elm_dart_nnodes} nodes)"
+my_eam_dart_nnodes=0
+[[ "${EAM_DART_RUN}" != "on" ]] || my_eam_dart_nnodes=${my_job_nnodes}
+echo "DA valid time: ${DA_VALID_TIME}; EAM=${EAM_DART_RUN} (${my_eam_dart_nnodes} nodes)"
 
-if [[ "${ELM_DART_RUN}" == "on" && "${ELM_USES_SEQUENTIAL_PRIOR}" != "TRUE" ]]; then
-  ( set -Eeuo pipefail; cd "${my_wkdir}"; ELM_DART_PREFLIGHT_ONLY=TRUE . "${my_workflow_lib}/cycle/elm_dart_assimilation.sh" ) || fail "ELM DART preflight failed; no component assimilation was started"
-fi
-
-if [[ "${ELM_DART_RUN}" == "on" && "${ELM_USES_SEQUENTIAL_PRIOR}" == "TRUE" ]]; then
-  ( set -Eeuo pipefail; cd "${my_wkdir}"; ELM_DART_PREFLIGHT_ONLY=TRUE ELM_DART_PREFLIGHT_STATIC_ONLY=TRUE . "${my_workflow_lib}/cycle/elm_dart_assimilation.sh" ) || fail "static ELM DART preflight failed; no component assimilation was started"
-fi
-
-rm -f -- "${my_status_dir}/eam_assim_complete.${DA_VALID_TIME}" "${my_status_dir}/elm_assim_complete.${DA_VALID_TIME}" "${my_status_dir}/coupled_assim_complete.${DA_VALID_TIME}"
+rm -f -- "${my_status_dir}/eam_assim_complete.${DA_VALID_TIME}"
 eam_da_log="${LOG_DIR}/assim.eam.${SLURM_JOB_ID:-$$}.cycle${DATA_ASSIMILATION_CYCLES}.log"
-elm_da_log="${LOG_DIR}/assim.elm.${SLURM_JOB_ID:-$$}.cycle${DATA_ASSIMILATION_CYCLES}.log"
-eam_da_pid=""
-elm_da_pid=""
-eam_da_status=0
-elm_da_status=0
-if [[ "${ELM_DART_RUN}" == "on" && "${ELM_USES_SEQUENTIAL_PRIOR}" == "TRUE" ]]; then
-  mkdir -p "${DA_TRANSACTION_DIR}" || fail "could not create DA transaction directory: ${DA_TRANSACTION_DIR}"
-  [[ ! -e "${STALE_ELM_DART_MARKER}" ]] || fail "stale ELM transaction marker requires a full forecast rebuild: ${STALE_ELM_DART_MARKER}"
-  printf 'cycle=%s\nvalid_time=%s\nslurm_job_id=%s\nstarted_at=%s\nphase=waiting_for_eam\n' \
-    "${DATA_ASSIMILATION_CYCLES}" "${DA_VALID_TIME}" "${SLURM_JOB_ID:-none}" "$(date '+%F %T')" > "${STALE_ELM_DART_MARKER}" \
-    || fail "could not create sequential ELM transaction marker"
-fi
 if [[ "${EAM_DART_RUN}" == "on" ]]; then
-  ( set -Eeuo pipefail; cd "${my_wkdir}"; . "${my_workflow_lib}/cycle/eam_dart_assimilation.sh" ) > "${eam_da_log}" 2>&1 &
-  eam_da_pid=$!
+  if ! ( set -Eeuo pipefail; cd "${my_wkdir}"; . "${my_workflow_lib}/cycle/eam_dart_assimilation.sh" ) > "${eam_da_log}" 2>&1; then
+    echo "ERROR: EAM log: ${eam_da_log}"
+    tail -n 40 "${eam_da_log}" >&2 || true
+    fail "cycle handoff blocked because the EAM analysis failed"
+  fi
 else
   echo "EAM DART assimilation is ${EAM_DART_RUN}"
 fi
-if [[ "${ELM_DART_RUN}" == "on" && "${ELM_USES_SEQUENTIAL_PRIOR}" == "TRUE" ]]; then
-  [[ "${EAM_DART_RUN}" == "on" ]] || fail "ELM sequential-prior mode requires EAM DA at the same valid time"
-  wait "${eam_da_pid}" || eam_da_status=$?
-  eam_da_pid=""
-  if (( eam_da_status != 0 )); then
-    echo "ERROR: EAM assimilation failed before the sequential ELM pass (status ${eam_da_status})"
-    tail -n 40 "${eam_da_log}" >&2 || true
-    fail "ELM sequential-prior pass blocked because EAM did not complete"
-  fi
-  ( set -Eeuo pipefail; cd "${my_wkdir}"; ELM_DART_PREFLIGHT_ONLY=TRUE . "${my_workflow_lib}/cycle/elm_dart_assimilation.sh" ) || fail "ELM sequential-prior preflight failed after EAM completed"
-fi
-if [[ "${ELM_DART_RUN}" == "on" ]]; then
-  ( set -Eeuo pipefail; cd "${my_wkdir}"; ELM_DART_TRANSACTION_STARTED="${ELM_USES_SEQUENTIAL_PRIOR}" . "${my_workflow_lib}/cycle/elm_dart_assimilation.sh" ) > "${elm_da_log}" 2>&1 &
-  elm_da_pid=$!
-else
-  echo "ELM DART assimilation is ${ELM_DART_RUN}"
-fi
-[[ -z "${eam_da_pid}" ]] || wait "${eam_da_pid}" || eam_da_status=$?
-[[ -z "${elm_da_pid}" ]] || wait "${elm_da_pid}" || elm_da_status=$?
-if (( eam_da_status != 0 || elm_da_status != 0 )); then
-  echo "ERROR: component assimilation failed: EAM=${eam_da_status}, ELM=${elm_da_status}"
-  [[ "${EAM_DART_RUN}" != "on" ]] || { echo "ERROR: EAM log: ${eam_da_log}"; tail -n 40 "${eam_da_log}" >&2 || true; }
-  [[ "${ELM_DART_RUN}" != "on" ]] || { echo "ERROR: ELM log: ${elm_da_log}"; tail -n 40 "${elm_da_log}" >&2 || true; }
-  fail "cycle handoff blocked because an enabled component analysis failed"
-fi
 
-write_da_record() {
-  local component="$1" mode="$2"
-  local record="${my_status_dir}/${component}_assim_complete.${DA_VALID_TIME}"
-  printf 'valid_time=%s\ncase=%s\nensemble_size=%s\ncycle=%s\nda_mode=%s\nslurm_job_id=%s\ncompleted_at=%s\n' "${DA_VALID_TIME}" "${my_casename}" "${my_ensnum}" "${DATA_ASSIMILATION_CYCLES}" "${mode}" "${SLURM_JOB_ID:-none}" "$(date '+%F %T')" > "${record}.tmp.${SLURM_JOB_ID:-$$}"
-  mv -f "${record}.tmp.${SLURM_JOB_ID:-$$}" "${record}"
-}
-[[ "${EAM_DART_RUN}" == "on" ]] || write_da_record eam "${EAM_DART_RUN}"
-[[ "${EAM_DART_RUN}" != "on" ]] || write_da_record eam on
-[[ "${ELM_DART_RUN}" == "on" ]] || write_da_record elm "${ELM_DART_RUN}"
-if [[ "${ELM_DART_RUN}" == "on" ]]; then
-  [[ -s "${my_status_dir}/elm_assim_complete.${DA_VALID_TIME}" ]] || fail "ELM completion record is missing"
-fi
-coupled_record="${my_status_dir}/coupled_assim_complete.${DA_VALID_TIME}"
-printf 'valid_time=%s\ncase=%s\nensemble_size=%s\ncycle=%s\neam_da=%s\nelm_da=%s\nslurm_job_id=%s\ncompleted_at=%s\n' "${DA_VALID_TIME}" "${my_casename}" "${my_ensnum}" "${DATA_ASSIMILATION_CYCLES}" "${EAM_DART_RUN}" "${ELM_DART_RUN}" "${SLURM_JOB_ID:-none}" "$(date '+%F %T')" > "${coupled_record}.tmp.${SLURM_JOB_ID:-$$}"
-mv -f "${coupled_record}.tmp.${SLURM_JOB_ID:-$$}" "${coupled_record}"
-echo "Enabled component analyses completed; coupled handoff is permitted"
+eam_record="${my_status_dir}/eam_assim_complete.${DA_VALID_TIME}"
+printf 'valid_time=%s\ncase=%s\nensemble_size=%s\ncycle=%s\nda_mode=%s\nslurm_job_id=%s\ncompleted_at=%s\n' "${DA_VALID_TIME}" "${my_casename}" "${my_ensnum}" "${DATA_ASSIMILATION_CYCLES}" "${EAM_DART_RUN}" "${SLURM_JOB_ID:-none}" "$(date '+%F %T')" > "${eam_record}.tmp.${SLURM_JOB_ID:-$$}"
+mv -f "${eam_record}.tmp.${SLURM_JOB_ID:-$$}" "${eam_record}"
+echo "EAM analysis step completed (${EAM_DART_RUN}); handoff is permitted"
 
 DATA_ASSIMILATION_CYCLES=$((DATA_ASSIMILATION_CYCLES+1))
 

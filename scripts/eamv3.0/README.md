@@ -1,27 +1,39 @@
-# E3SM–DART Coupled Ensemble Workflow
+# E3SM–DART EAM-Only Ensemble Workflow
 
 
-> Maintained EAM-SE repository template for E3SM maint-3.0. Derived from the
+> Maintained repository template for E3SM maint-3.0. Derived from the
 > operational `v3_dart_cda/3_ne30pg2_dart_cpl_en40` workflow on 2026-08-22.
 > Runtime state, logs, backups, deprecated scripts, and experiment output are
 > intentionally excluded. Review every setting in `create_and_setup_case.sh`
 > and every `#SBATCH` directive before submission.
 
-This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-assimilation workflow for a 40-member coupled E3SM ensemble. The numbered scripts are the user-facing entry points. Internal workers and templates live under `workflow_lib/` and should not normally be executed directly.
+This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-assimilation workflow for a coupled E3SM ensemble. The numbered scripts are the user-facing entry points. Internal workers and templates live under `workflow_lib/` and should not normally be executed directly.
 
+## Scope: EAM-DART only
 
-## EAM-SE integration
+This workflow assimilates **atmospheric observations into EAM only**, in fully
+coupled E3SM. ELM, MOSART, MPAS-Ocean and MPAS-Seaice run as model components
+and are carried forward by the coupled forecast, but no ELM data assimilation
+is involved:
 
-EAM-SE uses the standard E3SM source tree and does not require component
-SourceMods from this DART model directory.
+- No ELM DART analysis, ELM DART namelist, or ELM perturbation.
+- No ELM DART SourceMods are installed in the cases.
+- ELM writes only its monthly-mean `h0` history; the 6-hourly instantaneous
+  `h1`/`h2` streams that ELM-DART reads are not configured.
+- It uses upstream NCAR DART (`baseline` version profile) and only the EAM-SE
+  DART build in `models/eam-se/work`.
 
-The repository template enables EAM analysis, leaves ELM analysis and strongly
-coupled sequential-prior/posterior exchange off, resets the completed-cycle
-counter to zero, and attempts one cycle per allocation. Enable ELM only when a
-compatible ELM-DART checkout and E3SM build are available.
-All raw model output uses the fixed per-member layout `ENxx/archive`. The ELM
-`h1` and vector `h2` streams are written as six-hourly instantaneous records so
-each assimilation cycle can select and validate one exact-time record.
+Related workflows: `scripts/e3smv3.0_wcp/` (weakly coupled EAM and ELM DA) and
+`scripts/e3smv3.0_scp/` (strongly coupled EAM and ELM DA).
+
+The default `create_and_setup_case.sh` is a small Perlmutter (`pm-cpu`)
+functional test: 4 members on 4 nodes (each member uses all 4 nodes, one at a
+time), 6-hourly EAM DA cycles from 2011-11-01 00Z to 18Z, and up to three cycles
+per Step 4 allocation. It uses its own run path and case name
+(`dart_eam_test`, `EAMEN4_...`). Scale up by editing `create_and_setup_case.sh`
+and the `#SBATCH` directives together.
+
+All raw model output uses the fixed per-member layout `ENxx/archive`.
 
 ## Quick start
 
@@ -62,7 +74,7 @@ Do not bypass a failed stage by manually creating completion records. Downstream
 4. Coupled forecast–assimilation cycling
         ├── 5. Compression (optional, independent range driver)
         ├── 6. DART diagnostics
-        ├── 7. EAM/ELM history post-processing
+        ├── 7. EAM history post-processing (plus ELM monthly climatology)
         └── 8. EAM/ELM restart-variable extraction
 ```
 
@@ -82,6 +94,7 @@ Steps 1–4 form the core cycling workflow. Steps 5–8 are post-cycle utilities
 ├── 8_run_post_init.sh
 ├── create_and_setup_case.sh
 ├── workflow_lib/
+│   ├── common/         # Shared file commands (MOVE, COPY, LINK, REMOVE) sourced by every stage
 │   ├── compress/       # Step 5 worker
 │   ├── cycle/          # Step 4 cycle, assimilation, and handoff logic
 │   ├── diagnostics/    # Step 6 workers
@@ -106,21 +119,21 @@ Only the numbered scripts should normally be submitted with `sbatch`. Files in `
 
 Important groups include:
 
-- Runtime environments: `my_conda_setup_file` and `my_analysis_conda_env` for Steps 2–3, plus `my_dart_env_file` for DART-dependent stages.
+- Runtime environments: `my_analysis_env_file` (NCO) for Steps 2, 7 and 8, plus `my_dart_env_file` for DART-dependent stages (Steps 3–6).
 - Slurm resources: `my_task_per_node`, `my_job_nnodes`, `my_project`, `my_jobqueue`, and `my_walltime`.
 - Ensemble configuration: `my_ensnum`, `my_nodes_per_member`, setup concurrency, and forecast retry settings.
 - Model configuration: `my_e3sm_code`, `my_runtype`, `my_compset`, `my_resolution`, `my_runpath`, and `my_casename`.
 - Initial state: `my_casedate`, `my_casetod`, `my_refcase`, `my_refdate`, `my_reftod`, `my_refdir`, and component restart paths.
-- Timeline and DART configuration: `my_e3sm_cycle_hours`, the shared E3SM start/end time, component-specific `my_eam_dart_cycle_hours` and `my_elm_dart_cycle_hours`, DART code and run directories, observation paths, and diagnostic ranges.
+- Timeline and DART configuration: `my_e3sm_cycle_hours`, the shared E3SM start/end time, the EAM DA cadence `my_eam_dart_cycle_hours`, DART code and run directories, observation paths, and diagnostic ranges.
 - Cycling behavior: `my_cycles_per_job`, minimum cycle runtime, shutdown margin, and handoff concurrency.
 
-`my_conda_setup_file` and `my_analysis_conda_env` explicitly select the analysis environment that supplies NCO and related tools for initial-condition generation and perturbation.
+`my_analysis_env_file` names the script sourced to provide NCO and related tools for Steps 2, 7 and 8. It defaults to the shared E3SM-Unified environment (`load_latest_e3sm_unified_pm-cpu.sh`); point it at a versioned `load_e3sm_unified_<version>_<machine>.sh` to pin an experiment. Step 3 needs only `my_dart_env_file`.
 
-`my_dart_env_file` names the workflow-owned, machine-specific environment used by cycling, compression, and diagnostics. It resolves from `my_machine` to `workflow_lib/env/env_${my_machine}_specific.sh` (for example, `env_compy_specific.sh`) rather than to a generated file beneath a DART `work/` directory. The numbered drivers validate it before starting substantive work.
+`my_dart_env_file` names the machine-specific environment used by cycling, compression, and diagnostics. It resolves from `my_machine` to `models/mach_env/env_${my_machine}_specific.sh` in the repository root (for example, `env_pm-cpu_specific.sh`), the same file used to build DART, so runtime modules always match the build. The numbered drivers validate it before starting substantive work.
 
 Runtime DART namelists are also workflow-owned. The explicit
-`my_eam_filter_nml`, `my_eam_perturb_nml`, `my_eam_diag_nml`, and
-`my_elm_filter_nml` settings select the templates under
+`my_eam_filter_nml`, `my_eam_perturb_nml`, and `my_eam_diag_nml` settings
+select the templates under
 `workflow_lib/namelists/`. DART model `work/input.nml` files remain reserved for
 build-time utilities such as `preprocess`.
 
@@ -178,6 +191,10 @@ Step 2 requires a matching Step 1 completion record. It prepares restart inputs 
 
 AMIP does not require MPAS-O, but this workflow still requires MPAS-I and coupler files.
 
+Members are prepared in parallel, up to `my_max_parallel_icbc` at a time
+(set it to 1 to prepare them one by one). Each member writes a log to
+`runtmp/logs/step2_icbc.ENxx.<job>.log`, and any failed member fails the stage.
+
 The completion record is named:
 
 ```text
@@ -197,6 +214,9 @@ runtmp/status/perturb_complete.<valid-time>
 ```
 
 An archive-level `.dart_perturb_in_progress` marker protects partially perturbed ensembles.
+
+Step 3 perturbs only EAM (temperature). ELM starts every member from the same
+restart and is not perturbed.
 
 ### Step 4 — Coupled cycling DA
 
@@ -272,7 +292,7 @@ MAX_CONCURRENT_WORKERS=4
 OVERWRITE_EXISTING="FALSE"
 ```
 
-Individual EAM/ELM products can be enabled or disabled using the `RUN_*` switches. Submit with:
+The EAM products and the ELM monthly climatology (from `h0`) can be enabled or disabled using the `RUN_*` switches. ELM daily and monthly time series are not available because this workflow does not write the 6-hourly ELM `h1` stream. Submit with:
 
 ```bash
 sbatch 7_run_post_hist.sh
@@ -405,43 +425,20 @@ This catches shell syntax errors but does not replace runtime preflight or a con
 
 Files under `deprecated/` are retained only for historical reference. They are not part of the active workflow and may lack current safety checks. Do not submit them as replacements for numbered stages.
 
-### Component assimilation scheduling in Step 4
+### EAM assimilation scheduling in Step 4
 
-The E3SM forecast advances on the shared `my_e3sm_cycle_hours` timeline. EAM
-and ELM assimilation have independent enable switches, cadences, and end times.
-At each forecast valid time, a component is classified as `on`, `not_due`,
-`ended`, or `off`. Cycle handoff and the shared cycle counter advance only after
-every component due at that time completes successfully and validates all
-ensemble members.
+The E3SM forecast advances on the shared `my_e3sm_cycle_hours` timeline. At each
+forecast valid time, EAM DA is `on` (due), `not_due`, `ended` (past
+`my_eam_dart_end_date`/`my_eam_dart_end_tod`), or `off`. When it is due, the EAM
+analysis uses every node of the Step 4 allocation; otherwise Step 4 performs a
+forecast-only cycle. Cycle handoff and the cycle counter advance only after the
+analysis completes and every ensemble member validates. A failed analysis leaves
+an in-progress marker, and the retry path rebuilds every forecast member before
+assimilation is attempted again.
 
-When EAM and ELM are both due, their execution mode is derived from the strongly
-coupled settings:
-
-- Direct mode is used unless both `strongly_coupled_on=on` and
-  `lnd_da_use_sequential_prior_post=.true.`. EAM and ELM run concurrently and
-  split the 160-node allocation equally.
-- Sequential mode is used when both settings above are enabled. EAM runs first
-  on all 160 nodes and produces the sequential prior; after EAM succeeds and
-  the dependent inputs validate, ELM runs on all 160 nodes.
-
-If only one component is due, it receives all 160 nodes. If neither component
-is due, Step 4 performs a forecast-only cycle. A failed component assimilation
-leaves an in-progress marker, and the retry path rebuilds every forecast member
-before assimilation is attempted again.
-
-In direct mode, land observations are read from `my_elm_dart_obsdir` using
-`YYYYMM_6H/obs_seq.YYYY-MM-DD-SSSSS`. In sequential mode, ELM consumes the EAM
-sequential-prior output. This experiment uses separate working copies of the
-gridded ELM `h1` stream for history and vector-history input.
-
-Component assimilation is controlled in `create_and_setup_case.sh`:
+EAM assimilation is controlled in `create_and_setup_case.sh`:
 
 ```bash
 export my_eam_dart_da="on"   # on or off
-export my_elm_dart_da="on"   # on or off
+export my_eam_dart_cycle_hours=6
 ```
-
-The enable switches do not determine cadence: an enabled component runs only
-when its component-specific interval is due and its configured end time has not
-been exceeded. In the current configuration EAM is enabled every 6 hours and
-ELM is disabled.

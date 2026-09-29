@@ -37,21 +37,37 @@ stamp_to_epoch() {
 epoch_to_stamp() { date -u -d "@$1" '+%Y-%m-%d-00000'; }
 record_value() { awk -F= -v key="$2" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$1"; }
 
-if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
-  WORK_DIR=$(readlink -f "${SLURM_SUBMIT_DIR}") || fail "cannot resolve SLURM_SUBMIT_DIR"
-else
-  SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}") || fail "cannot resolve script path"
-  WORK_DIR=$(dirname "${SCRIPT_PATH}")
-fi
+# Find this workflow's own directory (the one holding create_and_setup_case.sh),
+# never another workflow's:
+#  1. the directory of this script when it runs in place (including salloc);
+#  2. under sbatch Slurm runs a copy, so the submitted script's original path;
+#  3. otherwise the submission directory, with a warning.
+resolve_workflow_dir() {
+  local here cmd
+  here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || here=""
+  if [[ -n "${here}" && -r "${here}/create_and_setup_case.sh" ]]; then
+    printf '%s\n' "${here}"; return 0
+  fi
+  if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v scontrol >/dev/null 2>&1; then
+    cmd=$(scontrol show job -o "${SLURM_JOB_ID}" 2>/dev/null | sed -n 's/.* Command=\([^ ]*\).*/\1/p')
+    [[ -z "${cmd}" || "${cmd}" == /* ]] || cmd="${SLURM_SUBMIT_DIR:-.}/${cmd}"
+    if [[ -n "${cmd}" && -r "$(dirname -- "${cmd}")/create_and_setup_case.sh" ]]; then
+      (cd -- "$(dirname -- "${cmd}")" && pwd -P); return 0
+    fi
+  fi
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && -r "${SLURM_SUBMIT_DIR}/create_and_setup_case.sh" ]]; then
+    echo "WARNING: could not locate this script's own directory; using the submission directory ${SLURM_SUBMIT_DIR}" >&2
+    (cd -- "${SLURM_SUBMIT_DIR}" && pwd -P); return 0
+  fi
+  return 1
+}
+WORK_DIR=$(resolve_workflow_dir) || fail "cannot find create_and_setup_case.sh next to this script or in the submission directory"
+echo "Using workflow configuration: ${WORK_DIR}/create_and_setup_case.sh"
 cd "${WORK_DIR}"
 [[ -r create_and_setup_case.sh ]] || fail "missing create_and_setup_case.sh"
 source ./create_and_setup_case.sh
-[[ -n "${my_conda_setup_file:-}" ]] || fail "my_conda_setup_file is unset"
-[[ -r "${my_conda_setup_file}" ]] || fail "configured Conda setup is not readable: ${my_conda_setup_file}"
-[[ -n "${my_analysis_conda_env:-}" ]] || fail "my_analysis_conda_env is unset"
-echo "Activating configured analysis environment: ${my_analysis_conda_env}"
-source "${my_conda_setup_file}"
-conda activate "${my_analysis_conda_env}" || fail "could not activate Conda environment: ${my_analysis_conda_env}"
+source "${my_workflow_lib:?}/common/analysis_env.sh"
+load_analysis_env || fail "could not load the analysis environment"
 
 for cmd in awk date flock mktemp mv ncdump ncks ncrename readlink rm; do
   command -v "${cmd}" >/dev/null 2>&1 || fail "required command not found: ${cmd}"

@@ -3,11 +3,12 @@
 # Multi-cycle Slurm driver. With my_cycles_per_job=1 this preserves the
 # original one-cycle-per-job behavior.
 #------------------------------------------------------------------------------
-#SBATCH --account=esmd
-#SBATCH --time=24:00:00
-#SBATCH --partition=slurm
+#SBATCH --account=m4849
+#SBATCH --time=03:00:00
+#SBATCH --constraint=cpu
+#SBATCH --qos=regular
 #SBATCH --job-name=e3sm_dart_ensda_cyc
-#SBATCH --nodes=160
+#SBATCH --nodes=4
 #SBATCH --output=runtmp/logs/e3sm_dart_ensda_cyc.%j
 #SBATCH --exclusive
 #SBATCH --no-kill
@@ -48,13 +49,32 @@ validate_my_eam_cycle_overrides() {
   done
 }
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-  [[ -n "${SLURM_SUBMIT_DIR:-}" ]] || fail "SLURM_SUBMIT_DIR is unavailable"
-  my_wkdir=$(readlink -f "${SLURM_SUBMIT_DIR}") || fail "could not resolve SLURM_SUBMIT_DIR"
-else
-  SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}") || fail "could not resolve script path"
-  my_wkdir=$(dirname "${SCRIPT_PATH}")
-fi
+# Find this workflow's own directory (the one holding create_and_setup_case.sh),
+# never another workflow's:
+#  1. the directory of this script when it runs in place (including salloc);
+#  2. under sbatch Slurm runs a copy, so the submitted script's original path;
+#  3. otherwise the submission directory, with a warning.
+resolve_workflow_dir() {
+  local here cmd
+  here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || here=""
+  if [[ -n "${here}" && -r "${here}/create_and_setup_case.sh" ]]; then
+    printf '%s\n' "${here}"; return 0
+  fi
+  if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v scontrol >/dev/null 2>&1; then
+    cmd=$(scontrol show job -o "${SLURM_JOB_ID}" 2>/dev/null | sed -n 's/.* Command=\([^ ]*\).*/\1/p')
+    [[ -z "${cmd}" || "${cmd}" == /* ]] || cmd="${SLURM_SUBMIT_DIR:-.}/${cmd}"
+    if [[ -n "${cmd}" && -r "$(dirname -- "${cmd}")/create_and_setup_case.sh" ]]; then
+      (cd -- "$(dirname -- "${cmd}")" && pwd -P); return 0
+    fi
+  fi
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && -r "${SLURM_SUBMIT_DIR}/create_and_setup_case.sh" ]]; then
+    echo "WARNING: could not locate this script's own directory; using the submission directory ${SLURM_SUBMIT_DIR}" >&2
+    (cd -- "${SLURM_SUBMIT_DIR}" && pwd -P); return 0
+  fi
+  return 1
+}
+my_wkdir=$(resolve_workflow_dir) || fail "cannot find create_and_setup_case.sh next to this script or in the submission directory"
+echo "Using workflow configuration: ${my_wkdir}/create_and_setup_case.sh"
 CONFIG_FILE="${my_wkdir}/create_and_setup_case.sh"
 SCRIPT_PATH="${my_wkdir}/4_run_dart_e3sm_cycleda.sh"
 [[ -r "${SCRIPT_PATH}" ]] || fail "missing persistent cycle driver: ${SCRIPT_PATH}"
@@ -62,6 +82,9 @@ SCRIPT_PATH="${my_wkdir}/4_run_dart_e3sm_cycleda.sh"
 source "${CONFIG_FILE}"
 [[ -n "${my_dart_env_file:-}" ]] || fail "my_dart_env_file is unset"
 [[ -r "${my_dart_env_file}" ]] || fail "configured DART environment is not readable: ${my_dart_env_file}"
+# Load it before checking commands: ncdump and the MPI/NetCDF libraries come from it.
+echo "Using configured DART machine environment: ${my_dart_env_file}"
+source "${my_dart_env_file}"
 mkdir -p "${my_log_dir}" "${my_status_dir}" "${my_lock_dir}" "${my_handoff_dir}"
 
 for cmd in awk basename cksum date dirname flock mkdir mv ncdump readlink sbatch squeue; do
@@ -219,7 +242,7 @@ reached_configured_end() {
 validate_cycle_end() {
   local prefix date_var tod_var date_value tod_value component_stamp
   local e3sm_stamp="${my_e3sm_end_date//-/}${my_e3sm_end_tod}"
-  for prefix in my_e3sm my_eam_dart my_elm_dart; do
+  for prefix in my_e3sm my_eam_dart; do
     date_var="${prefix}_end_date"
     tod_var="${prefix}_end_tod"
     date_value="${!date_var:-}"
@@ -285,36 +308,14 @@ SHUTDOWN_MARGIN_SEC="${SHUTDOWN_MARGIN_SEC:-${my_cycle_shutdown_margin_sec:-900}
 validate_positive_int "CYCLES_PER_JOB" "${CYCLES_PER_JOB}"
 CYCLE_WORKER="${my_workflow_lib}/cycle/e3sm_dart_single_cycle.sh"
 validate_on_off "my_eam_dart_da" "${my_eam_dart_da}"
-validate_on_off "my_elm_dart_da" "${my_elm_dart_da}"
 validate_positive_int "my_e3sm_cycle_hours" "${my_e3sm_cycle_hours}"
 [[ "${my_e3sm_completed_cycles:-}" =~ ^[0-9]+$ ]] || fail "my_e3sm_completed_cycles must be a non-negative integer"
 validate_positive_int "my_eam_dart_cycle_hours" "${my_eam_dart_cycle_hours}"
-validate_positive_int "my_elm_dart_cycle_hours" "${my_elm_dart_cycle_hours}"
 (( my_eam_dart_cycle_hours % my_e3sm_cycle_hours == 0 )) || fail "my_eam_dart_cycle_hours must be an integer multiple of my_e3sm_cycle_hours"
-(( my_elm_dart_cycle_hours % my_e3sm_cycle_hours == 0 )) || fail "my_elm_dart_cycle_hours must be an integer multiple of my_e3sm_cycle_hours"
 validate_cycle_end
-ELM_EXECUTION_MODE="direct"
-if [[ "${strongly_coupled_on,,}" == "on" && "${lnd_da_use_sequential_prior_post,,}" == ".true." ]]; then
-  ELM_EXECUTION_MODE="sequential"
-fi
-if [[ "${my_elm_dart_da,,}" == "on" && "${ELM_EXECUTION_MODE}" == "sequential" ]]; then
-  [[ "${my_eam_dart_da,,}" == "on" ]] || fail "sequential-prior ELM requires my_eam_dart_da=on"
-  [[ "${atm_da_output_sequential_prior_post,,}" == ".true." ]] || fail "sequential-prior ELM requires atm_da_output_sequential_prior_post=.true."
-  [[ "${lnd_da_output_sequential_prior_post,,}" == ".false." ]] || fail "ELM cannot use and output sequential priors in the same filter pass"
-  (( my_elm_dart_cycle_hours % my_eam_dart_cycle_hours == 0 )) || fail "ELM sequential-prior cadence must be an integer multiple of the EAM DA cadence"
-  eam_end_stamp="${my_eam_dart_end_date//-/}${my_eam_dart_end_tod}"
-  elm_end_stamp="${my_elm_dart_end_date//-/}${my_elm_dart_end_tod}"
-  (( 10#${elm_end_stamp} <= 10#${eam_end_stamp} )) || fail "ELM sequential-prior end time must not exceed the EAM DA end time"
-elif [[ "${my_elm_dart_da,,}" == "on" && "${strongly_coupled_on,,}" == "on" ]]; then
-  [[ "${lnd_da_strongly_coupled,,}" == ".false." && "${lnd_da_state_model}" == "Land" && "${lnd_da_obs_model}" == "Land" ]] \
-    || fail "direct-observation ELM requires lnd_da_strongly_coupled=.false., state_model=Land, and obs_model=Land"
-fi
 validate_positive_int "MIN_CYCLE_TIME_SEC" "${MIN_CYCLE_TIME_SEC}"
 validate_positive_int "SHUTDOWN_MARGIN_SEC" "${SHUTDOWN_MARGIN_SEC}"
 validate_positive_int "my_job_nnodes" "${my_job_nnodes}"
-if [[ "${my_eam_dart_da,,}" == "on" && "${my_elm_dart_da,,}" == "on" && "${ELM_EXECUTION_MODE}" == "direct" ]] && (( my_job_nnodes % 2 != 0 )); then
-  fail "my_job_nnodes must be even when concurrent EAM and ELM DART are both enabled"
-fi
 if [[ -n "${SLURM_JOB_NUM_NODES:-}" && "${SLURM_JOB_NUM_NODES}" != "${my_job_nnodes}" ]]; then
   fail "Slurm allocation has ${SLURM_JOB_NUM_NODES} nodes; configuration requires ${my_job_nnodes}"
 fi

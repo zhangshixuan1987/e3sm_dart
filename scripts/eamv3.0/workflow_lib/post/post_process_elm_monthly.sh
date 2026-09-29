@@ -23,18 +23,11 @@ date
 echo "============================================"
 
 # System utilities
-MOVE='/usr/bin/mv'
-COPY='/usr/bin/cp --preserve=timestamps'
-LINK='/usr/bin/ln -fs'
-REMOVE='/usr/bin/rm'
-LIST='/usr/bin/ls'
+source "${my_workflow_lib:?}/common/file_commands.sh"
 
 # Environment setup (assumes these are exported externally or in create_and_setup_case.sh)
 # E3SM_ROOT, DART_ROOT, my_modeldir, my_ensnum, my_casename, etc.
 
-DART_ROOT="${my_elm_dart_code}"
-DART_MODEL=${my_elm_dart_model}
-DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/work
 ARCHIVE_DIR="${my_modeldir}/${POST_ENSTR}/archive"
 MAP_FILE="${my_elm_post_map_file:?my_elm_post_map_file is not set}"
 

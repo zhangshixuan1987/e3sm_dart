@@ -21,10 +21,8 @@ OVERWRITE_EXISTING="FALSE"
 RUN_EAM_6HOURLY="TRUE"
 RUN_EAM_DAILY="TRUE"
 RUN_EAM_CLIM="TRUE"
-RUN_ELM_DAILY="TRUE"
 RUN_ELM_CLIM="TRUE"
 RUN_EAM_MONTHLY="TRUE"
-RUN_ELM_MONTHLY="TRUE"
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 normalize_bool() {
@@ -33,21 +31,37 @@ normalize_bool() {
   printf '%s' "${value}"
 }
 
-if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
-  WORK_DIR=$(readlink -f "${SLURM_SUBMIT_DIR}") || fail "cannot resolve SLURM_SUBMIT_DIR"
-else
-  SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}") || fail "cannot resolve script path"
-  WORK_DIR=$(dirname "${SCRIPT_PATH}")
-fi
+# Find this workflow's own directory (the one holding create_and_setup_case.sh),
+# never another workflow's:
+#  1. the directory of this script when it runs in place (including salloc);
+#  2. under sbatch Slurm runs a copy, so the submitted script's original path;
+#  3. otherwise the submission directory, with a warning.
+resolve_workflow_dir() {
+  local here cmd
+  here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || here=""
+  if [[ -n "${here}" && -r "${here}/create_and_setup_case.sh" ]]; then
+    printf '%s\n' "${here}"; return 0
+  fi
+  if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v scontrol >/dev/null 2>&1; then
+    cmd=$(scontrol show job -o "${SLURM_JOB_ID}" 2>/dev/null | sed -n 's/.* Command=\([^ ]*\).*/\1/p')
+    [[ -z "${cmd}" || "${cmd}" == /* ]] || cmd="${SLURM_SUBMIT_DIR:-.}/${cmd}"
+    if [[ -n "${cmd}" && -r "$(dirname -- "${cmd}")/create_and_setup_case.sh" ]]; then
+      (cd -- "$(dirname -- "${cmd}")" && pwd -P); return 0
+    fi
+  fi
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && -r "${SLURM_SUBMIT_DIR}/create_and_setup_case.sh" ]]; then
+    echo "WARNING: could not locate this script's own directory; using the submission directory ${SLURM_SUBMIT_DIR}" >&2
+    (cd -- "${SLURM_SUBMIT_DIR}" && pwd -P); return 0
+  fi
+  return 1
+}
+WORK_DIR=$(resolve_workflow_dir) || fail "cannot find create_and_setup_case.sh next to this script or in the submission directory"
+echo "Using workflow configuration: ${WORK_DIR}/create_and_setup_case.sh"
 cd "${WORK_DIR}"
 [[ -r create_and_setup_case.sh ]] || fail "missing workflow configuration"
 source ./create_and_setup_case.sh
-[[ -n "${my_conda_setup_file:-}" ]] || fail "my_conda_setup_file is unset"
-[[ -r "${my_conda_setup_file}" ]] || fail "configured Conda setup is not readable: ${my_conda_setup_file}"
-[[ -n "${my_analysis_conda_env:-}" ]] || fail "my_analysis_conda_env is unset"
-echo "Activating configured analysis environment: ${my_analysis_conda_env}"
-source "${my_conda_setup_file}"
-conda activate "${my_analysis_conda_env}" || fail "could not activate Conda environment: ${my_analysis_conda_env}"
+source "${my_workflow_lib:?}/common/analysis_env.sh"
+load_analysis_env || fail "could not load the analysis environment"
 mkdir -p "${my_log_dir}" "${my_status_dir}" "${my_lock_dir}"
 
 for cmd in awk bash date find flock mkdir mv ncdump readlink sort; do
@@ -55,7 +69,7 @@ for cmd in awk bash date find flock mkdir mv ncdump readlink sort; do
 done
 [[ "${POST_MODE}" =~ ^(base|monthly|all)$ ]] || fail "POST_MODE must be base, monthly, or all"
 [[ "${MAX_CONCURRENT_WORKERS}" =~ ^[1-9][0-9]*$ ]] || fail "MAX_CONCURRENT_WORKERS must be positive"
-for setting in OVERWRITE_EXISTING RUN_EAM_6HOURLY RUN_EAM_DAILY RUN_EAM_CLIM RUN_ELM_DAILY RUN_ELM_CLIM RUN_EAM_MONTHLY RUN_ELM_MONTHLY; do
+for setting in OVERWRITE_EXISTING RUN_EAM_6HOURLY RUN_EAM_DAILY RUN_EAM_CLIM RUN_ELM_CLIM RUN_EAM_MONTHLY; do
   printf -v "${setting}" '%s' "$(normalize_bool "${setting}" "${!setting}")"
 done
 
@@ -110,10 +124,8 @@ product_worker() {
     eam_6hourly) echo "${my_workflow_lib}/post/post_process_eam_6hourly.sh" ;;
     eam_daily) echo "${my_workflow_lib}/post/post_process_eam_daily.sh" ;;
     eam_clim) echo "${my_workflow_lib}/post/post_process_eam_monthly.sh" ;;
-    elm_daily) echo "${my_workflow_lib}/post/post_process_elm_daily.sh" ;;
     elm_clim) echo "${my_workflow_lib}/post/post_process_elm_monthly.sh" ;;
     eam_monthly) echo "${my_workflow_lib}/post/hfreq_to_eam_monthly.sh" ;;
-    elm_monthly) echo "${my_workflow_lib}/post/hfreq_to_elm_monthly.sh" ;;
     *) return 1 ;;
   esac
 }
@@ -125,10 +137,8 @@ validate_product_outputs() {
     eam_6hourly) root="${member_archive}/post/atm/180x360_aave/ts/6hourly"; pattern="*.${member}.*.nc" ;;
     eam_daily) root="${member_archive}/post/atm/180x360_aave/ts/daily"; pattern="*.${member}.*.nc" ;;
     eam_clim) root="${member_archive}/post/atm/180x360_aave/clim"; pattern="*.${member}.*.nc" ;;
-    elm_daily) root="${member_archive}/post/lnd/180x360_aave/ts/daily"; pattern="*.${member}.*.nc" ;;
     elm_clim) root="${member_archive}/post/lnd/180x360_aave/clim"; pattern="*.${member}.*.nc" ;;
     eam_monthly) root="${member_archive}/post/atm/180x360_aave/monthly"; pattern="*.${member}.*.nc" ;;
-    elm_monthly) root="${member_archive}/post/lnd/180x360_aave/monthly"; pattern="*.${member}.*.nc" ;;
   esac
   [[ -d "${root}" ]] || return 1
   while IFS= read -r file; do
@@ -217,11 +227,9 @@ BASE_PRODUCTS=()
 [[ "${RUN_EAM_6HOURLY}" == "TRUE" ]] && BASE_PRODUCTS+=(eam_6hourly)
 [[ "${RUN_EAM_DAILY}" == "TRUE" ]] && BASE_PRODUCTS+=(eam_daily)
 [[ "${RUN_EAM_CLIM}" == "TRUE" ]] && BASE_PRODUCTS+=(eam_clim)
-[[ "${RUN_ELM_DAILY}" == "TRUE" ]] && BASE_PRODUCTS+=(elm_daily)
 [[ "${RUN_ELM_CLIM}" == "TRUE" ]] && BASE_PRODUCTS+=(elm_clim)
 MONTHLY_PRODUCTS=()
 [[ "${RUN_EAM_MONTHLY}" == "TRUE" ]] && MONTHLY_PRODUCTS+=(eam_monthly)
-[[ "${RUN_ELM_MONTHLY}" == "TRUE" ]] && MONTHLY_PRODUCTS+=(elm_monthly)
 
 if [[ "${POST_MODE}" == "base" || "${POST_MODE}" == "all" ]]; then
   (( ${#BASE_PRODUCTS[@]} > 0 )) || fail "no base products enabled"
@@ -229,13 +237,11 @@ if [[ "${POST_MODE}" == "base" || "${POST_MODE}" == "all" ]]; then
 fi
 if [[ "${POST_MODE}" == "monthly" || "${POST_MODE}" == "all" ]]; then
   [[ "${RUN_EAM_MONTHLY}" != "TRUE" || "${RUN_EAM_DAILY}" == "TRUE" || "${RUN_EAM_6HOURLY}" == "TRUE" || "${POST_MODE}" == "monthly" ]] || fail "EAM monthly processing requires EAM daily or 6-hourly base processing"
-  [[ "${RUN_ELM_MONTHLY}" != "TRUE" || "${RUN_ELM_DAILY}" == "TRUE" || "${POST_MODE}" == "monthly" ]] || fail "ELM monthly processing requires ELM daily base processing"
   (( ${#MONTHLY_PRODUCTS[@]} > 0 )) || fail "no monthly products enabled"
   if [[ "${POST_MODE}" == "monthly" ]]; then
     for i in $(seq 1 "${my_ensnum}"); do
       member=$(printf 'EN%02d' "${i}")
       [[ "${RUN_EAM_MONTHLY}" != "TRUE" ]] || validate_completion_record eam_daily "${member}" || validate_completion_record eam_6hourly "${member}" || fail "missing or invalid EAM base completion for ${member}"
-      [[ "${RUN_ELM_MONTHLY}" != "TRUE" ]] || validate_completion_record elm_daily "${member}" || fail "missing or invalid ELM base completion for ${member}"
     done
   fi
   for product in "${MONTHLY_PRODUCTS[@]}"; do run_product_batch "${product}"; done

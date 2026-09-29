@@ -9,9 +9,10 @@
 #SBATCH  --nodes=1
 #SBATCH  --output=e3sm_dart_ensda_init.%j
 #SBATCH  --exclusive
-#SBATCH  --account=esmd
-#SBATCH  --time=02:00:00
-#SBATCH  --qos=short
+#SBATCH  --account=m4849
+#SBATCH  --time=00:30:00
+#SBATCH  --constraint=cpu
+#SBATCH  --qos=debug
 
 fail() {
   echo "ERROR: $*"
@@ -47,22 +48,41 @@ on_exit_summary() {
 }
 trap on_exit_summary EXIT
 
-if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
-  my_wkdir=$(readlink -f "${SLURM_SUBMIT_DIR}") || fail "cannot resolve SLURM_SUBMIT_DIR"
-else
-  script_path=$(readlink -f "${BASH_SOURCE[0]}") || fail "cannot resolve script path"
-  my_wkdir=$(dirname "${script_path}")
-fi
+# Find this workflow's own directory (the one holding create_and_setup_case.sh),
+# never another workflow's:
+#  1. the directory of this script when it runs in place (including salloc);
+#  2. under sbatch Slurm runs a copy, so the submitted script's original path;
+#  3. otherwise the submission directory, with a warning.
+resolve_workflow_dir() {
+  local here cmd
+  here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || here=""
+  if [[ -n "${here}" && -r "${here}/create_and_setup_case.sh" ]]; then
+    printf '%s\n' "${here}"; return 0
+  fi
+  if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v scontrol >/dev/null 2>&1; then
+    cmd=$(scontrol show job -o "${SLURM_JOB_ID}" 2>/dev/null | sed -n 's/.* Command=\([^ ]*\).*/\1/p')
+    [[ -z "${cmd}" || "${cmd}" == /* ]] || cmd="${SLURM_SUBMIT_DIR:-.}/${cmd}"
+    if [[ -n "${cmd}" && -r "$(dirname -- "${cmd}")/create_and_setup_case.sh" ]]; then
+      (cd -- "$(dirname -- "${cmd}")" && pwd -P); return 0
+    fi
+  fi
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && -r "${SLURM_SUBMIT_DIR}/create_and_setup_case.sh" ]]; then
+    echo "WARNING: could not locate this script's own directory; using the submission directory ${SLURM_SUBMIT_DIR}" >&2
+    (cd -- "${SLURM_SUBMIT_DIR}" && pwd -P); return 0
+  fi
+  return 1
+}
+my_wkdir=$(resolve_workflow_dir) || fail "cannot find create_and_setup_case.sh next to this script or in the submission directory"
+echo "Using workflow configuration: ${my_wkdir}/create_and_setup_case.sh"
 cd "${my_wkdir}"
 source "${my_wkdir}/create_and_setup_case.sh"
 
-[[ -n "${my_conda_setup_file:-}" ]] || fail "my_conda_setup_file is unset"
-[[ -r "${my_conda_setup_file}" ]] || fail "configured Conda setup is not readable: ${my_conda_setup_file}"
-[[ -n "${my_analysis_conda_env:-}" ]] || fail "my_analysis_conda_env is unset"
-echo "Activating configured analysis environment: ${my_analysis_conda_env}"
-source "${my_conda_setup_file}"
-conda activate "${my_analysis_conda_env}" || fail "could not activate Conda environment: ${my_analysis_conda_env}"
+source "${my_workflow_lib:?}/common/analysis_env.sh"
+load_analysis_env || fail "could not load the analysis environment"
 mkdir -p "${my_log_dir}" "${my_status_dir}" "${my_lock_dir}"
+# Members read the same reference files concurrently. HDF5 (netCDF-4) file
+# locking can fail on shared file systems, and no two members write one file.
+export HDF5_USE_FILE_LOCKING=FALSE
 
 for cmd in awk bc ncks ncap2 ncrename ncdump dirname flock mkdir cp mv readlink rm touch; do
   check_command "${cmd}"
@@ -105,28 +125,26 @@ echo "valid time is $REF_DATE $REF_TOD (seconds) $REF_HOUR (hours)"
 # ==============================================================================
 # machine-specific dereferencing
 # suppress "rm" warnings if wildcard does not match anything
-VERBOSE='-v'
-MOVE='/usr/bin/mv'
-COPY='/usr/bin/cp --preserve=timestamps'
-LINK='/usr/bin/ln -fs'
-LINKV=TRUE
-LIST='/usr/bin/ls'
-REMOVE='/usr/bin/rm -fr'
+source "${my_workflow_lib:?}/common/file_commands.sh"
 # ==============================================================================
 
 prepare_mpas_restart() {
   local source_file="$1"
   local destination_file="$2"
   local tmp_file="${destination_file}.tmp.${SLURM_JOB_ID:-$$}"
-  rm -f -- "${tmp_file}"
+  # Also clear leftovers from a job killed mid-write; the step-2 lock guarantees
+  # no other job is writing this member now.
+  rm -f -- "${destination_file}".tmp.*
   ncks -O --hdr_pad=10000 "${source_file}" "${tmp_file}" || return 1
-  ncrename -v xtime,xtime.orig "${tmp_file}" || return 1
+  ncrename -v .xtime,xtime.orig "${tmp_file}" || return 1
   ncdump -h "${tmp_file}" >/dev/null 2>&1 || return 1
   touch --reference="${source_file}" "${tmp_file}" || return 1
   mv -f "${tmp_file}" "${destination_file}"
 }
-# Loop over members
-for i in `seq 1 ${my_ensnum}`;do
+# Prepare one member's initial conditions. Members write only to their own
+# archive directory and read the shared reference files, so they run in parallel.
+prepare_member_ic() {
+  local i="$1"
   echo === Member ${i} ===
   ENSTR=EN`printf "%02d" ${i}`
   DART_CASE=${my_casename}.${ENSTR}
@@ -134,9 +152,7 @@ for i in `seq 1 ${my_ensnum}`;do
   CASE_ARCHIVE_DIR="${MEMBER_ARCHIVE_DIR}/rest/${REF_DATE}-${REF_TOD}"
   echo "Run Case: ${DART_CASE}"
   echo "Run Directory: ${CASE_ARCHIVE_DIR}"
-  if [ ! -d "${CASE_ARCHIVE_DIR}" ];then
-    mkdir -p "${CASE_ARCHIVE_DIR}"
-  fi
+  [[ -d "${CASE_ARCHIVE_DIR}" ]] || { echo "ERROR: member directory was not created: ${CASE_ARCHIVE_DIR}"; exit 1; }
   for scomp in "atm" "lnd" "rof" "ocn" "ice" "drv"; do
      echo === E3SM component ${scomp} ===
      cd ${CASE_ARCHIVE_DIR}
@@ -239,7 +255,52 @@ for i in `seq 1 ${my_ensnum}`;do
         echo "${CPL_INITIAL_FILENAME}"  >  rpointer.drv
      fi
   done
+}
+
+# Build every member's archive directory first, in order, so path or permission
+# problems stop the stage before any large file is copied.
+for i in $(seq 1 "${my_ensnum}"); do
+  member_rest_dir="${my_modeldir}/$(printf 'EN%02d' "${i}")/archive/rest/${REF_DATE}-${REF_TOD}"
+  mkdir -p "${member_rest_dir}" || fail "cannot create member directory: ${member_rest_dir}"
 done
+echo "Created archive directories for ${my_ensnum} members"
+
+MAX_PARALLEL_ICBC=${my_max_parallel_icbc:-4}
+validate_positive_int "my_max_parallel_icbc" "${MAX_PARALLEL_ICBC}"
+echo "Preparing ${my_ensnum} members, up to ${MAX_PARALLEL_ICBC} at a time; per-member logs in ${my_log_dir}"
+icbc_pids=()
+icbc_members=()
+failed_members=()
+
+# Wait for the oldest running member and record whether it succeeded.
+wait_oldest_member() {
+  local pid="${icbc_pids[0]}"
+  local enstr="${icbc_members[0]}"
+  local log="${my_log_dir}/step2_icbc.${enstr}.${SLURM_JOB_ID:-$$}.log"
+  icbc_pids=("${icbc_pids[@]:1}")
+  icbc_members=("${icbc_members[@]:1}")
+  if wait "${pid}"; then
+    echo "Member ${enstr} prepared"
+  else
+    echo "ERROR: member ${enstr} failed; last lines of ${log}:"
+    tail -n 20 "${log}" || true
+    failed_members+=("${enstr}")
+  fi
+}
+
+for i in $(seq 1 "${my_ensnum}"); do
+  ENSTR=$(printf 'EN%02d' "${i}")
+  ( prepare_member_ic "${i}" ) > "${my_log_dir}/step2_icbc.${ENSTR}.${SLURM_JOB_ID:-$$}.log" 2>&1 &
+  icbc_pids+=("$!")
+  icbc_members+=("${ENSTR}")
+  if (( ${#icbc_pids[@]} >= MAX_PARALLEL_ICBC )); then
+    wait_oldest_member
+  fi
+done
+while (( ${#icbc_pids[@]} > 0 )); do
+  wait_oldest_member
+done
+(( ${#failed_members[@]} == 0 )) || fail "initial-condition preparation failed for ${#failed_members[@]} member(s): ${failed_members[*]}"
 
 # Validate every required component before declaring step 2 complete.
 for i in `seq 1 ${my_ensnum}`; do

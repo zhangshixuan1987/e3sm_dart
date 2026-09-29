@@ -1,7 +1,7 @@
 # Workflow behavior contract (e3smv3.0_scp, strongly coupled DA)
 
 `scripts/e3smv3.0_scp/` is the strongly coupled EAM–ELM workflow. It is a
-separate, self-contained workflow: `scripts/e3smv3.0/` (EAM-DART) keeps its own
+separate, self-contained workflow: `scripts/e3smv3.0_wcp/` (weakly coupled DA) keeps its own
 copy of every script and is maintained independently. A general fix that
 applies to both workflows must be made in both directories. This workflow
 requires the `scp-dart` version profile (`tools/checkout-version scp-dart`).

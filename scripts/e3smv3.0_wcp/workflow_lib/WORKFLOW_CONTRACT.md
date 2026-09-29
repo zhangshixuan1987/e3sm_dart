@@ -1,6 +1,7 @@
-# Workflow behavior contract (e3smv3.0, EAM-DART)
+# Workflow behavior contract (e3smv3.0_wcp, weakly coupled DA)
 
-`scripts/e3smv3.0/` is the EAM-DART workflow. It is a separate, self-contained
+`scripts/e3smv3.0_wcp/` is the weakly coupled EAM/ELM workflow: separate EAM
+and ELM analyses, coupled through the E3SM forecast. It is a separate, self-contained
 workflow: `scripts/e3smv3.0_scp/` (strongly coupled DA) keeps its own copy of
 every script and is maintained independently. A general fix that applies to
 both workflows must be made in both directories.

@@ -11,7 +11,7 @@ This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-as
 
 ## Scope and required DART version
 
-This directory is the **strongly coupled** variant of `scripts/e3smv3.0/`. It
+This directory is the **strongly coupled** variant of the weakly coupled `scripts/e3smv3.0_wcp/`. It
 tests EAM and ELM assimilation that update each other's states, and it is
 under development.
 
@@ -35,7 +35,7 @@ used by mistake. Rebuild them only when the fork DART or an interface changes.
 
 This workflow uses its own run path (`dart_scp_test`) and case name
 (`SCPEN<n>_...`), so it never shares run directories or runtime state with
-`scripts/e3smv3.0/`.
+`scripts/e3smv3.0_wcp/`.
 
 The default `create_and_setup_case.sh` is a small Perlmutter (`pm-cpu`)
 functional test: 4 members on 4 nodes (each member uses all 4 nodes, one at a time), 6-hourly cycles from

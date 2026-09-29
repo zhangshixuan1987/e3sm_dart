@@ -130,7 +130,7 @@ Each interface has two independent build directories:
 
 | Directory | Workflow | DART profile | Observation definitions |
 | --- | --- | --- | --- |
-| `models/eam-se/work`, `models/elm/work` | `scripts/e3smv3.0` (single-component DA) | `baseline` | That component's own |
+| `models/eam-se/work`, `models/elm/work` | `scripts/e3smv3.0_wcp` (weakly coupled DA) | `baseline` | That component's own |
 | `models/eam-se/work_scp`, `models/elm/work_scp` | `scripts/e3smv3.0_scp` (strongly coupled DA) | `scp-dart` | Atmospheric and land |
 
 Build each with its profile checked out (`tools/checkout-version <profile>`).
@@ -196,7 +196,7 @@ The maintained workflows are documented in [`scripts/README.md`](../scripts/READ
 
 | Workflow | Purpose |
 | --- | --- |
-| [`scripts/e3smv3.0/`](../scripts/e3smv3.0/README.md) | Coupled EAM and ELM assimilation with E3SM maint-3.0 |
+| [`scripts/e3smv3.0_wcp/`](../scripts/e3smv3.0_wcp/README.md) | Weakly coupled EAM and ELM assimilation with E3SM maint-3.0 |
 | [`scripts/e3smv3.0_scp/`](../scripts/e3smv3.0_scp/README.md) | Strongly coupled EAM and ELM assimilation; requires the `scp-dart` profile |
 | [`scripts/eamv3.0/`](../scripts/eamv3.0/README.md) | EAM-SE-only assimilation with E3SM maint-3.0 |
 | `scripts/eamv2.0/` | Legacy EAM/E3SM v2 workflow retained for reference |
@@ -210,7 +210,7 @@ experiment- and machine-specific. Do not run a workflow with configuration or
 The normal Slurm sequence is:
 
 ```bash
-cd scripts/e3smv3.0             # or scripts/eamv3.0
+cd scripts/e3smv3.0_wcp         # or scripts/e3smv3.0_scp, scripts/eamv3.0
 mkdir -p runtmp/logs
 
 sbatch 1_run_e3sm_ensemble_setup.sh

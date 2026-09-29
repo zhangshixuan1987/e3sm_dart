@@ -167,7 +167,7 @@ Prepare an environment with:
 - A DART build configuration appropriate for the target HPC system.
 
 Building the DART interfaces does not build the E3SM forecast model. The
-numbered workflow under `scripts/e3smv3.0/` or `scripts/eamv3.0/` creates and
+numbered workflow under `scripts/e3smv3.0_wcp/`, `scripts/e3smv3.0_scp/` or `scripts/eamv3.0/` creates and
 builds an E3SM case from the top-level `E3SM/` submodule during Step 1.
 
 ### Perlmutter
@@ -237,7 +237,7 @@ Verify the actual script implementation before relying on this behavior.
 
 The parentheses keep your terminal in the repository root after each build.
 
-These `work` builds serve the single-component workflow (`scripts/e3smv3.0`,
+These `work` builds serve the weakly coupled workflow (`scripts/e3smv3.0_wcp`,
 `baseline` DART profile). The strongly coupled workflow uses its own,
 independent builds in `models/eam-se/work_scp` and `models/elm/work_scp`,
 compiled with the `scp-dart` profile; see `scripts/e3smv3.0_scp/README.md`.
@@ -322,14 +322,17 @@ Before submitting an experiment, verify:
 
 Choose the maintained workflow before submitting jobs:
 
-- `scripts/e3smv3.0/` enables coupled EAM and ELM assimilation.
+- `scripts/e3smv3.0_wcp/` runs weakly coupled EAM and ELM assimilation: separate
+  EAM and ELM analyses, coupled through the E3SM forecast.
+- `scripts/e3smv3.0_scp/` runs strongly coupled EAM and ELM assimilation, in
+  which each component's observations also update the other component.
 - `scripts/eamv3.0/` enables EAM-only assimilation.
 
 Review every setting in the selected `create_and_setup_case.sh`, then submit
 the numbered stages from that workflow directory:
 
 ```bash
-cd scripts/e3smv3.0  # or scripts/eamv3.0
+cd scripts/e3smv3.0_wcp  # or scripts/e3smv3.0_scp, scripts/eamv3.0
 mkdir -p runtmp/logs
 
 sbatch 1_run_e3sm_ensemble_setup.sh

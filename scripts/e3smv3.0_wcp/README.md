@@ -1,4 +1,4 @@
-# E3SM–DART Coupled Ensemble Workflow
+# E3SM–DART Weakly Coupled Ensemble Workflow
 
 
 > Maintained repository template for E3SM maint-3.0. Derived from the
@@ -9,15 +9,21 @@
 
 This directory contains a restart-safe, Slurm-driven E3SM–DART cycling data-assimilation workflow for a coupled E3SM ensemble. The numbered scripts are the user-facing entry points. Internal workers and templates live under `workflow_lib/` and should not normally be executed directly.
 
-## Branch scope
+## Scope: weakly coupled DA
 
-- `main` (this branch) is focused on **EAM-DART**: atmospheric assimilation
-  in fully coupled E3SM. This is the tested path.
-- **ELM-DART** is supported by the workflow on `main` but has **not been tested
-  yet**. It is disabled in the default configuration.
-- **Strongly coupled DA** is developed in `scripts/e3smv3.0_scp/`, which
-  uses the strongly coupled DART fork through the `scp-dart` version profile.
-  The strongly coupled switches described below are kept off in this workflow.
+This workflow runs **weakly coupled** EAM and ELM data assimilation in fully
+coupled E3SM: EAM observations update only EAM and land observations update
+only ELM, in separate DART analyses. The two components interact through the
+coupled E3SM forecast between analyses, not through the analyses themselves.
+
+- **EAM-DART** (atmospheric assimilation) is the tested path.
+- **ELM-DART** is supported but has **not been tested yet**; it is disabled in
+  the default configuration.
+- It uses upstream NCAR DART (`baseline` version profile) and the DART builds in
+  `models/eam-se/work` and `models/elm/work`.
+- **Strongly coupled DA**, where each component's observations also update the
+  other component, is the separate workflow `scripts/e3smv3.0_scp/`. The
+  strongly coupled switches described below stay off here.
 
 The default `create_and_setup_case.sh` is a small Perlmutter (`pm-cpu`)
 functional test: 4 members on 4 nodes (each member uses all 4 nodes, one at a time), 6-hourly cycles from

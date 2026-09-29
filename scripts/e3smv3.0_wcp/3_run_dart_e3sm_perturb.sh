@@ -115,6 +115,33 @@ done
 perturb_status="${my_status_dir}/perturb_complete.${my_refdate}-${my_reftod}"
 rm -f -- "${perturb_status}"
 
+# ELM restarts are perturbed too when ELM DA is on and my_elm_perturb_specs is set.
+PERTURB_ELM=FALSE
+if [[ "${my_elm_dart_da,,}" == "on" && -n "${my_elm_perturb_specs:-}" ]]; then
+   PERTURB_ELM=TRUE
+   [[ "${my_elm_perturb_seed:-}" =~ ^[0-9]+$ ]] || fail "my_elm_perturb_seed must be a non-negative integer"
+   for spec in ${my_elm_perturb_specs}; do
+      [[ "${spec}" =~ ^[A-Za-z0-9_]+:(rel|abs):[0-9]*\.?[0-9]+$ ]] || fail "invalid my_elm_perturb_specs entry: ${spec} (expected VARIABLE:rel|abs:AMPLITUDE)"
+   done
+   for i in $(seq 1 "${my_ensnum}"); do
+      ENSTR=$(printf 'EN%02d' "${i}")
+      elm_restart="${my_modeldir}/${ENSTR}/archive/rest/${my_refdate}-${my_reftod}/${my_casename}.${ENSTR}.elm.r.${my_refdate}-${my_reftod}.nc"
+      [[ -s "${elm_restart}" ]] || fail "missing ELM restart for ${ENSTR}; rerun Step 2: ${elm_restart}"
+   done
+   case "${my_elm_perturb_method:-dart}" in
+      dart)
+         ELM_PERTURB_EXE="${my_elm_dart_code}/models/${my_elm_dart_model}/${my_dart_build_dir_name:?}/perturb_single_instance"
+         [[ -x "${ELM_PERTURB_EXE}" ]] || fail "missing ${ELM_PERTURB_EXE}; rebuild the ELM interface with quickbuild.sh"
+         source "${my_workflow_lib:?}/common/dart_build.sh"
+         check_dart_build "$(dirname "${ELM_PERTURB_EXE}")" || fail "the ELM DART build does not match this workflow's DART version"
+         [[ -s "${my_elm_grid_history_file:-}" ]] || fail "my_elm_grid_history_file must name an ELM history file on this land grid: ${my_elm_grid_history_file:-unset}"
+         [[ -s "${my_elm_filter_nml:-}" ]] || fail "missing ELM filter namelist template: ${my_elm_filter_nml:-unset}"
+         ;;
+      direct) ;;
+      *) fail "my_elm_perturb_method must be dart or direct, got: ${my_elm_perturb_method}" ;;
+   esac
+fi
+
 # DART (Intel Fortran) keeps large per-task work arrays on the stack; the default
 # 8 MB limit makes filter crash with SIGSEGV. srun passes this limit to every task.
 ulimit -s unlimited 2>/dev/null || {
@@ -984,6 +1011,98 @@ fi
 # Then this script will need to feed the files in output_restart_list_file
 # to the next model advance.
 # This gets the .i. or .r. piece from the EAM-SE format file name.
+
+# Perturb the ELM restarts while the in-progress markers are still set, so an
+# interrupted run sends the user back to Step 2 for clean restarts.
+# ELM perturbation with DART: perturb_single_instance starts from member 1 and
+# writes every member through links to its archived restart. The ELM
+# interface's pert_model_copies changes only fields_to_perturb, on soil levels
+# of vegetated/bare-soil and crop columns. A history file on the same land grid
+# supplies the grid, because no ELM history exists before the first forecast.
+perturb_elm_with_dart() {
+   local work="${my_elm_dart_run_dir}/${my_refdate}-${my_reftod}.perturb"
+   local stamp="${my_refdate}-${my_reftod}" spec name mode amp row qty vmin vmax
+   local rows="" fields="" amps="" types="" i ENSTR inst
+   source "${my_workflow_lib:?}/common/namelist_tools.sh"
+   ${REMOVE} "${work}" || return 1
+   mkdir -p "${work}" || return 1
+   cd "${work}" || return 1
+   cp -p "${my_elm_filter_nml}" input.nml || return 1
+
+   # Restart-only state holding just the perturbed fields, with the same
+   # quantities and bounds as the assimilation template.
+   for spec in ${my_elm_perturb_specs}; do
+      IFS=: read -r name mode amp <<< "${spec}"
+      row=$(awk -F"'" -v v="${name}" '$2 == v && tolower($0) ~ /'\''restart'\''/ {print $4 "|" $6 "|" $8; exit}' input.nml)
+      [[ -n "${row}" ]] || { echo "ERROR: ${name} is not a restart variable in ${my_elm_filter_nml}"; return 1; }
+      IFS='|' read -r qty vmin vmax <<< "${row}"
+      rows+="${rows:+,
+                    }'${name}', '${qty}', '${vmin}', '${vmax}', 'restart', 'UPDATE'"
+      fields+="${fields:+, }'${name}'"
+      amps+="${amps:+, }${amp}"
+      if [[ "${mode}" == rel ]]; then types+="${types:+, }'relative'"; else types+="${types:+, }'absolute'"; fi
+   done
+   nml_set_value input.nml model_nml elm_variables "${rows}" || return 1
+   nml_set_value input.nml model_nml elm_restart_filename "'elm_restart.nc'" || return 1
+   nml_set_value input.nml model_nml elm_history_filename "'elm_history.nc'" || return 1
+   nml_set_value input.nml model_nml custom_routine_to_generate_ensemble ".true." || return 1
+   nml_set_value input.nml model_nml fields_to_perturb "${fields}" || return 1
+   nml_set_value input.nml model_nml perturbation_amplitude "${amps}" || return 1
+   nml_set_value input.nml model_nml perturbation_type "${types}" || return 1
+   nml_set_value input.nml model_nml perturb_soil_levels_only ".true." || return 1
+   nml_set_value input.nml model_nml perturb_natural_crop_columns_only ".true." || return 1
+   if ! nml_print_group input.nml perturb_single_instance_nml | grep -q .; then
+      printf '\n&perturb_single_instance_nml\n   /\n' >> input.nml || return 1
+   fi
+   nml_set_value input.nml perturb_single_instance_nml ens_size "${my_ensnum}" || return 1
+   nml_set_value input.nml perturb_single_instance_nml input_files "'elm_restart_0001.nc'" || return 1
+   nml_set_value input.nml perturb_single_instance_nml output_file_list "'elm_perturbed_restarts.txt'" || return 1
+   nml_set_value input.nml perturb_single_instance_nml perturbation_method "'model'" || return 1
+   nml_set_value input.nml perturb_single_instance_nml perturbation_amplitude "0.0" || return 1
+
+   : > elm_perturbed_restarts.txt
+   for i in $(seq 1 "${my_ensnum}"); do
+      ENSTR=$(printf 'EN%02d' "${i}"); inst=$(printf '%04d' "${i}")
+      ln -s "${my_modeldir}/${ENSTR}/archive/rest/${stamp}/${my_casename}.${ENSTR}.elm.r.${stamp}.nc" "elm_restart_${inst}.nc" || return 1
+      echo "elm_restart_${inst}.nc" >> elm_perturbed_restarts.txt
+   done
+   ln -s elm_restart_0001.nc elm_restart.nc || return 1
+   ln -s "${my_elm_grid_history_file}" elm_history.nc || return 1
+   cp -p "${ELM_PERTURB_EXE}" ./perturb_single_instance || return 1
+
+   [[ "${ELM_PERTURB_NML_ONLY:-FALSE}" != "TRUE" ]] || return 0
+   echo "`date` -- BEGIN ELM PERTURB_SINGLE_INSTANCE (${my_elm_perturb_specs})"
+   ${LAUNCHCMD} ./perturb_single_instance || { echo "ERROR: perturb_single_instance failed; see ${work}"; return 1; }
+   echo "`date` -- END ELM PERTURB_SINGLE_INSTANCE"
+}
+
+perturb_elm_directly() {
+   source "${my_workflow_lib:?}/common/analysis_env.sh"
+   (
+      load_analysis_env >/dev/null || exit 1
+      for i in $(seq 1 "${my_ensnum}"); do
+         ENSTR=$(printf 'EN%02d' "${i}")
+         elm_restart="${my_modeldir}/${ENSTR}/archive/rest/${my_refdate}-${my_reftod}/${my_casename}.${ENSTR}.elm.r.${my_refdate}-${my_reftod}.nc"
+         python3 "${my_workflow_lib}/perturb/elm_perturb_restart.py" "${elm_restart}" \
+            --member "${i}" --seed "${my_elm_perturb_seed}" ${my_elm_perturb_specs} || exit 1
+      done
+   )
+}
+
+if [[ "${PERTURB_ELM}" == "TRUE" ]]; then
+   echo "`date` -- BEGIN ELM RESTART PERTURBATION (method=${my_elm_perturb_method:-dart})"
+   if [[ "${my_elm_perturb_method:-dart}" == "dart" ]]; then
+      ( perturb_elm_with_dart ) || fail "ELM DART perturbation failed; rerun Step 2 before retrying Step 3"
+   else
+      perturb_elm_directly || fail "ELM restart perturbation failed; rerun Step 2 before retrying Step 3"
+   fi
+   for i in $(seq 1 "${my_ensnum}"); do
+      ENSTR=$(printf 'EN%02d' "${i}")
+      elm_restart="${my_modeldir}/${ENSTR}/archive/rest/${my_refdate}-${my_reftod}/${my_casename}.${ENSTR}.elm.r.${my_refdate}-${my_reftod}.nc"
+      ncdump -h "${elm_restart}" >/dev/null 2>&1 || fail "invalid perturbed ELM restart for ${ENSTR}: ${elm_restart}"
+   done
+   echo "`date` -- END ELM RESTART PERTURBATION"
+fi
 
 # Step 3 is complete only after filter output validation and all diagnostic
 # post-processing have succeeded.

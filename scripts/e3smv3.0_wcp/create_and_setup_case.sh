@@ -162,20 +162,34 @@ declare -Ag my_eam_cycle_overrides=(
 # --- ELM DART assimilation --------------------------------------------------
 # ELM DA links single-record h1 history and h2 vector files from each member archive.
 ################################################################################
-# ELM DA is off until SMAP obs_seq files are staged on Perlmutter.
-export my_elm_dart_da="off"
+# Weakly coupled: EAM and ELM analyses run at the same valid time on their own
+# observations, each on half of the Step 4 nodes (my_job_nnodes must be even).
+# Land observations (SMAP soil moisture, MODIS LAI) as YYYYMM_6H/obs_seq.<time>.
+export my_elm_dart_da="on"
 export my_elm_dart_cycle_hours=6
 export my_elm_dart_end_date="${my_e3sm_end_date}"
 export my_elm_dart_end_tod="${my_e3sm_end_tod}"
 export my_elm_dart_run_dir="${my_dart_root}/elm"
 export my_elm_dart_code="${my_repository_root}"
 export my_elm_sourcemods_dir="${my_elm_dart_code}/models/elm/DART_SourceMods/e3sm_maint_3.0/src.elm"
-export my_elm_dart_obsdir="/global/cfs/cdirs/m4849/zhan391/reference/SMAP"
+export my_elm_dart_obsdir="/global/cfs/cdirs/m4849/zhan391/reference/LAND_SURFACE_OBS"
 export my_elm_dart_model="elm"
 export my_elm_history_stream="h1"
 export my_elm_vector_history_stream="h2"
 declare -Ag my_elm_dart_cycle_overrides=(
 )
+# Step 3 perturbs these ELM restart variables (soil levels only) for the initial
+# ensemble. Each entry is VARIABLE:rel|abs:AMPLITUDE, a Gaussian standard deviation:
+# rel = fraction of the value (kept >= 0), abs = native units. Empty = no ELM perturbation.
+export my_elm_perturb_specs="H2OSOI_LIQ:rel:0.05 H2OSOI_ICE:rel:0.05 T_SOISNO:abs:0.5"
+export my_elm_perturb_seed=20111101
+# dart:   DART perturb_single_instance with the ELM interface's pert_model_copies
+#         (soil levels of vegetated/bare-soil and crop columns). Needs the ELM
+#         build in models/elm/work and an ELM history file on this land grid.
+# direct: backup; workflow_lib/perturb/elm_perturb_restart.py edits the restarts
+#         (soil levels only, all columns; my_elm_perturb_seed sets the stream).
+export my_elm_perturb_method="dart"
+export my_elm_grid_history_file="/pscratch/sd/z/zhan391/e3sm_dart/dart_test/DARTEN4_WCYCL20TR_ne30pg2_r05_IcoswISC30E3r5_pm-cpu/EN01/archive/lnd/hist/DARTEN4_WCYCL20TR_ne30pg2_r05_IcoswISC30E3r5_pm-cpu.EN01.elm.h1.2011-11-01-00000.nc"
 
 ################################################################################
 # --- Strongly coupled DA setup ----------------------------------------------
@@ -194,7 +208,8 @@ export atm_da_obs_model="Atmosphere"
 
 export lnd_da_output_sequential_prior_post=".false."
 export lnd_da_use_sequential_prior_post=".false."
-export lnd_da_perturb_from_single_instance=".true."
+# .false.: keep the forecast land ensemble; Step 3 creates the initial land spread.
+export lnd_da_perturb_from_single_instance=".false."
 export lnd_da_perturbation_amplitude="0.2"
 export lnd_da_perturbation_method="uniform"
 export lnd_da_obs_sequence_in_name="obs_seq.out"

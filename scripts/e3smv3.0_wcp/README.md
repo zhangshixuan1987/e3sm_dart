@@ -17,8 +17,8 @@ only ELM, in separate DART analyses. The two components interact through the
 coupled E3SM forecast between analyses, not through the analyses themselves.
 
 - **EAM-DART** (atmospheric assimilation) is the tested path.
-- **ELM-DART** is supported but has **not been tested yet**; it is disabled in
-  the default configuration.
+- **ELM-DART** is enabled in the default configuration but has **not been
+  tested yet**.
 - It uses upstream NCAR DART (`baseline` version profile) and the DART builds in
   `models/eam-se/work` and `models/elm/work`.
 - **Strongly coupled DA**, where each component's observations also update the
@@ -27,7 +27,7 @@ coupled E3SM forecast between analyses, not through the analyses themselves.
 
 The default `create_and_setup_case.sh` is a small Perlmutter (`pm-cpu`)
 functional test: 4 members on 4 nodes (each member uses all 4 nodes, one at a time), 6-hourly cycles from
-2011-11-01 00Z to 18Z, EAM DA on, ELM DA off, strongly coupled DA off, and up
+2011-11-01 00Z to 18Z, EAM and ELM DA on (each on half of the nodes), strongly coupled DA off, and up
 to three cycles per Step 4 allocation. The operational template it derives from
 uses 40 members on 160 nodes; scale up by editing `create_and_setup_case.sh` and
 the `#SBATCH` directives together.
@@ -40,9 +40,9 @@ Step 1 installs the flattened Fortran files from
 before `case.setup` and compilation. CIME requires these files directly under
 `SourceMods/src.elm`; component source subdirectories must not be reproduced.
 
-The default configuration enables EAM analyses only; ELM analyses stay off
-until SMAP observation files are staged and the ELM-DART path is tested.
-Strongly coupled sequential-prior/posterior exchange is off, and the
+The default configuration enables both EAM and ELM analyses. ELM assimilates
+the land observations (SMAP soil moisture, MODIS leaf area index) in
+`my_elm_dart_obsdir`; this path has not been tested yet. Strongly coupled sequential-prior/posterior exchange is off, and the
 completed-cycle counter starts at zero. Change these controls
 only in `create_and_setup_case.sh` after matching the restart and status state.
 All raw model output uses the fixed per-member layout `ENxx/archive`. The ELM
@@ -228,6 +228,30 @@ runtmp/status/perturb_complete.<valid-time>
 ```
 
 An archive-level `.dart_perturb_in_progress` marker protects partially perturbed ensembles.
+
+When ELM DA is on and `my_elm_perturb_specs` is set, Step 3 also perturbs each
+member's ELM restart after the EAM perturbation succeeds, while the
+in-progress markers are still set. Each entry is `VARIABLE:rel|abs:AMPLITUDE`
+(a Gaussian standard deviation; `rel` is a fraction of the value and keeps it
+non-negative, `abs` is in native units). The default perturbs `H2OSOI_LIQ` and
+`H2OSOI_ICE` by 5% and `T_SOISNO` by 0.5 K. `my_elm_perturb_method` selects how:
+
+- `dart` (default): DART `perturb_single_instance` with the ELM interface's
+  `pert_model_copies` (`models/elm/model_mod.f90`). Step 3 builds a
+  restart-only ELM namelist from `my_elm_filter_nml` in
+  `<my_elm_dart_run_dir>/<time>.perturb/`, starts from member 1 and writes every
+  member. Only soil levels of vegetated/bare-soil and crop columns change.
+  Because no ELM history exists before the first forecast,
+  `my_elm_grid_history_file` must name an ELM history file on the same land
+  grid; it supplies only the grid. Requires `perturb_single_instance` in the
+  ELM build (`models/elm/work/quickbuild.sh`).
+- `direct` (backup): `workflow_lib/perturb/elm_perturb_restart.py` edits the
+  restarts with the E3SM-Unified environment. Only soil levels change, on all
+  columns; the random stream depends on `my_elm_perturb_seed`, the member and
+  the variable.
+
+In both methods snow layers, fill values and zeros are left as they are, so the
+snow state stays consistent.
 
 ### Step 4 — Coupled cycling DA
 
@@ -471,10 +495,10 @@ Component assimilation is controlled in `create_and_setup_case.sh`:
 
 ```bash
 export my_eam_dart_da="on"   # on or off
-export my_elm_dart_da="off"  # on or off; ELM-DART is not yet tested
+export my_elm_dart_da="on"   # on or off; ELM-DART is not yet tested
 ```
 
 The enable switches do not determine cadence: an enabled component runs only
 when its component-specific interval is due and its configured end time has not
-been exceeded. In the current configuration EAM is enabled every 6 hours and
-ELM is disabled.
+been exceeded. In the current configuration EAM and ELM are both enabled every
+6 hours, so they run concurrently, each on half of the Step 4 nodes.

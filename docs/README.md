@@ -126,6 +126,17 @@ Build ELM:
 (cd models/elm/work && ./quickbuild.sh)
 ```
 
+Each interface has two independent build directories:
+
+| Directory | Workflow | DART profile | Observation definitions |
+| --- | --- | --- | --- |
+| `models/eam-se/work`, `models/elm/work` | `scripts/e3smv3.0` (single-component DA) | `baseline` | That component's own |
+| `models/eam-se/work_scp`, `models/elm/work_scp` | `scripts/e3smv3.0_scp` (strongly coupled DA) | `scp-dart` | Atmospheric and land |
+
+Build each with its profile checked out (`tools/checkout-version <profile>`).
+Every build writes `dart_build_info.txt` with the DART commit it used, and the
+workflows refuse a build compiled with a different DART.
+
 Both scripts find DART from the top level of the Git checkout, run DART
 `preprocess`, and then compile the interface-specific executables in the
 corresponding `work/` directory. They may therefore be run from any clone

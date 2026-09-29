@@ -30,7 +30,7 @@ source "${my_workflow_lib:?}/common/file_commands.sh"
 
 DART_ROOT="${my_elm_dart_code}"
 DART_MODEL=${my_elm_dart_model}
-DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/work
+DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
 ARCHIVE_DIR="${my_modeldir}/${POST_ENSTR}/archive"
 MAP_FILE="${my_elm_post_map_file:?my_elm_post_map_file is not set}"
 

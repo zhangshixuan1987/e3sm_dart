@@ -304,10 +304,12 @@
    obs_type_files          = '../../../DART/observations/forward_operators/obs_def_gps_mod.f90',
                              '../../../DART/observations/forward_operators/obs_def_upper_atm_mod.f90',
                              '../../../DART/observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
-                             '../../../DART/observations/forward_operators/obs_def_altimeter_mod.f90'
+                             '../../../DART/observations/forward_operators/obs_def_altimeter_mod.f90',
+                             '../../../DART/observations/forward_operators/obs_def_land_mod.f90'
    quantity_files          = '../../../DART/assimilation_code/modules/observations/atmosphere_quantities_mod.f90',
                              '../../../DART/assimilation_code/modules/observations/space_quantities_mod.f90',
-                             '../../../DART/assimilation_code/modules/observations/chemistry_quantities_mod.f90'
+                             '../../../DART/assimilation_code/modules/observations/chemistry_quantities_mod.f90',
+                             '../../../DART/assimilation_code/modules/observations/land_quantities_mod.f90'
    /
 
 ! Not usually assimilated.  No fundamental reason not to.

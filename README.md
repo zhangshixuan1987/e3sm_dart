@@ -237,6 +237,11 @@ Verify the actual script implementation before relying on this behavior.
 
 The parentheses keep your terminal in the repository root after each build.
 
+These `work` builds serve the single-component workflow (`scripts/e3smv3.0`,
+`baseline` DART profile). The strongly coupled workflow uses its own,
+independent builds in `models/eam-se/work_scp` and `models/elm/work_scp`,
+compiled with the `scp-dart` profile; see `scripts/e3smv3.0_scp/README.md`.
+
 Review the build output and confirm that the expected executables were
 produced. Executable names and available build options depend on the
 local scripts.

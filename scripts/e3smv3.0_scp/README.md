@@ -21,13 +21,17 @@ version profile (the `main` branch records upstream NCAR DART by default):
 ```bash
 tools/checkout-version scp-dart
 tools/validate-repository scp-dart
-(cd models/eam-se/work && ./quickbuild.sh)
-(cd models/elm/work && ./quickbuild.sh)
+(cd models/eam-se/work_scp && ./quickbuild.sh)
+(cd models/elm/work_scp && ./quickbuild.sh)
 ```
 
-Rebuild both interfaces after every profile switch. Return to the default with
-`tools/checkout-version baseline` (or `git submodule update --init --recursive`)
-and rebuild before running `scripts/e3smv3.0/`.
+This workflow uses its own DART builds in `models/eam-se/work_scp` and
+`models/elm/work_scp` (`my_dart_build_dir_name="work_scp"`), independent of the
+single-component builds in `models/*/work`. Their `input.nml` lists both
+atmospheric and land observation definitions. Each build records the DART
+commit it was compiled with (`dart_build_info.txt`), and Steps 3, 4 and 6 stop
+if it does not match the `scp-dart` profile, so the EAM-DART builds are never
+used by mistake. Rebuild them only when the fork DART or an interface changes.
 
 This workflow uses its own run path (`dart_scp_test`) and case name
 (`SCPEN<n>_...`), so it never shares run directories or runtime state with
@@ -252,7 +256,7 @@ non-negative, `abs` is in native units). The default perturbs `H2OSOI_LIQ` and
   Because no ELM history exists before the first forecast,
   `my_elm_grid_history_file` must name an ELM history file on the same land
   grid; it supplies only the grid. Requires `perturb_single_instance` in the
-  ELM build (`models/elm/work/quickbuild.sh`).
+  ELM build (`models/elm/work_scp/quickbuild.sh`).
 - `direct` (backup): `workflow_lib/perturb/elm_perturb_restart.py` edits the
   restarts with the E3SM-Unified environment. Only soil levels change, on all
   columns; the random stream depends on `my_elm_perturb_seed`, the member and
@@ -490,7 +494,7 @@ each starting from the previous pass's in-place analysis:
   `&obs_kind_nml` from the observation source's template, so pass 2 assimilates
   the EAM observation types and pass 4 the ELM types. Both DART interfaces must
   therefore be built with atmospheric and land observation definitions (see
-  `models/eam-se/work/input.nml` and `models/elm/work/input.nml`).
+  `models/eam-se/work_scp/input.nml` and `models/elm/work_scp/input.nml`).
 - Logs: `runtmp/logs/assim.scp.<job>.cycle<N>.pass{1..4}.log`.
 - A cycle-level marker (`transactions/<time>/.dart_scp_passes_in_progress`)
   covers all four passes. If any pass fails, the next attempt rebuilds every

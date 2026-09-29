@@ -37,6 +37,12 @@ export my_layout="custom-4_1x6_nhours"
 export my_analysis_env_file="/global/common/software/e3sm/anaconda_envs/load_latest_e3sm_unified_pm-cpu.sh"
 # Same machine environment used to build DART, so runtime modules match the build.
 export my_dart_env_file="${my_repository_root}/models/mach_env/env_${my_machine}_specific.sh"
+# DART version profile this workflow requires, and the build directory under
+# models/<interface>/ holding executables compiled with it. Build with:
+#   tools/checkout-version scp-dart && (cd models/eam-se/work_scp && ./quickbuild.sh) && (cd models/elm/work_scp && ./quickbuild.sh)
+# Steps 3, 4 and 6 refuse a build compiled with a different DART.
+export my_dart_version_profile="scp-dart"
+export my_dart_build_dir_name="work_scp"
 export my_eam_filter_nml="${my_workflow_lib}/namelists/eam/filter.nml"
 export my_eam_perturb_nml="${my_workflow_lib}/namelists/eam/perturb.nml"
 export my_eam_diag_nml="${my_workflow_lib}/namelists/eam/diagnostics.nml"

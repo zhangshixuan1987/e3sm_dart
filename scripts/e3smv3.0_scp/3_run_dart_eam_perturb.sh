@@ -130,8 +130,10 @@ if [[ "${my_elm_dart_da,,}" == "on" && -n "${my_elm_perturb_specs:-}" ]]; then
    done
    case "${my_elm_perturb_method:-dart}" in
       dart)
-         ELM_PERTURB_EXE="${my_elm_dart_code}/models/${my_elm_dart_model}/work/perturb_single_instance"
+         ELM_PERTURB_EXE="${my_elm_dart_code}/models/${my_elm_dart_model}/${my_dart_build_dir_name:?}/perturb_single_instance"
          [[ -x "${ELM_PERTURB_EXE}" ]] || fail "missing ${ELM_PERTURB_EXE}; rebuild the ELM interface with quickbuild.sh"
+         source "${my_workflow_lib:?}/common/dart_build.sh"
+         check_dart_build "$(dirname "${ELM_PERTURB_EXE}")" || fail "the ELM DART build does not match this workflow's DART version"
          [[ -s "${my_elm_grid_history_file:-}" ]] || fail "my_elm_grid_history_file must name an ELM history file on this land grid: ${my_elm_grid_history_file:-unset}"
          [[ -s "${my_elm_filter_nml:-}" ]] || fail "missing ELM filter namelist template: ${my_elm_filter_nml:-unset}"
          ;;
@@ -161,7 +163,9 @@ E3SM_ROOT=${my_e3sm_code}
 DART_ROOT=${my_eam_dart_code}
 DART_MODEL=${my_eam_dart_model}
 DART_SCPTDIR=${DART_ROOT}/models/${DART_MODEL}/shell_scripts
-DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/work
+DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
+source "${my_workflow_lib:?}/common/dart_build.sh"
+check_dart_build "${DART_WORKDIR}" || fail "the EAM DART build does not match this workflow's DART version"
 BASE_OBSDIR=${my_eam_dart_obsdir}
 BASE_PHIS=${my_eam_topography_file}
 BASE_SEMAPS=${my_eam_se_mapping_file}
@@ -229,7 +233,7 @@ echo "`date` -- BEGIN EAM_ASSIMILATE"
 # The DART input.nml in the model directory IS IMPORTANT during this part
 # because it defines what observation types are supported.
 # ==============================================================================
-targetdir=${DART_ROOT}/models/${DART_MODEL}/work
+targetdir=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
 if [ ! -x ${targetdir}/filter ]; then
    if [[ "${ALLOW_DART_REBUILD:-FALSE}" != "TRUE" ]]; then
       echo "ERROR: DART filter is missing: ${targetdir}/filter"

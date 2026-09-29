@@ -18,7 +18,7 @@ WORK_DIR=`pwd`
 DART_ROOT=${my_eam_dart_code}
 DART_MODEL=${my_eam_dart_model}
 DART_SCPTDIR=${DART_ROOT}/models/${DART_MODEL}/shell_scripts
-DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/work
+DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
 BASE_OBSDIR=${my_eam_dart_obsdir}
 BASE_PHIS=${my_eam_topography_file}
 BASE_SEMAPS=${my_eam_se_mapping_file}
@@ -84,7 +84,7 @@ scomp=`./xmlquery COMP_ATM             --value`
 # The DART input.nml in the model directory IS IMPORTANT during this part
 # because it defines what observation types are supported.
 # ==============================================================================
-targetdir=${DART_ROOT}/models/${DART_MODEL}/work
+targetdir=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
 if [ ! -x ${targetdir}/filter ]; then
    echo ""
    echo "WARNING: executable file 'filter' not found."

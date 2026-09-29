@@ -303,3 +303,6 @@ test_perturb
 !restart_file_tool/
 !system_simulation/
 !wakeup_filter/
+
+# DART build stamps written by quickbuild.sh
+models/*/work*/dart_build_info.txt

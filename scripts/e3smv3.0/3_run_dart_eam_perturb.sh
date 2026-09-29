@@ -136,7 +136,9 @@ E3SM_ROOT=${my_e3sm_code}
 DART_ROOT=${my_eam_dart_code}
 DART_MODEL=${my_eam_dart_model}
 DART_SCPTDIR=${DART_ROOT}/models/${DART_MODEL}/shell_scripts
-DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/work
+DART_WORKDIR=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
+source "${my_workflow_lib:?}/common/dart_build.sh"
+check_dart_build "${DART_WORKDIR}" || fail "the EAM DART build does not match this workflow's DART version"
 BASE_OBSDIR=${my_eam_dart_obsdir}
 BASE_PHIS=${my_eam_topography_file}
 BASE_SEMAPS=${my_eam_se_mapping_file}
@@ -204,7 +206,7 @@ echo "`date` -- BEGIN EAM_ASSIMILATE"
 # The DART input.nml in the model directory IS IMPORTANT during this part
 # because it defines what observation types are supported.
 # ==============================================================================
-targetdir=${DART_ROOT}/models/${DART_MODEL}/work
+targetdir=${DART_ROOT}/models/${DART_MODEL}/${my_dart_build_dir_name:?}
 if [ ! -x ${targetdir}/filter ]; then
    if [[ "${ALLOW_DART_REBUILD:-FALSE}" != "TRUE" ]]; then
       echo "ERROR: DART filter is missing: ${targetdir}/filter"

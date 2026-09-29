@@ -149,6 +149,13 @@ ELM_DART_DA="${my_elm_dart_da,,}"
 [[ "${EAM_DART_DA}" == "on" || "${EAM_DART_DA}" == "off" ]] || fail "my_eam_dart_da must be on or off"
 [[ "${ELM_DART_DA}" == "on" || "${ELM_DART_DA}" == "off" ]] || fail "my_elm_dart_da must be on or off"
 echo "Component DA modes: EAM=${EAM_DART_DA}, ELM=${ELM_DART_DA}"
+source "${my_workflow_lib:?}/common/dart_build.sh"
+if [[ "${EAM_DART_DA}" == "on" ]]; then
+  check_dart_build "${my_eam_dart_code}/models/${my_eam_dart_model}/${my_dart_build_dir_name:?}" || fail "the EAM DART build does not match this workflow's DART version"
+fi
+if [[ "${ELM_DART_DA}" == "on" ]]; then
+  check_dart_build "${my_elm_dart_code}/models/${my_elm_dart_model}/${my_dart_build_dir_name:?}" || fail "the ELM DART build does not match this workflow's DART version"
+fi
 
 
 LOG_DIR="${my_log_dir}"
@@ -553,7 +560,7 @@ repair_invalid_locked_files() {
 }
 
 preflight_cycle_inputs() {
-  local dart_workdir="${my_eam_dart_code}/models/${my_eam_dart_model}/work"
+  local dart_workdir="${my_eam_dart_code}/models/${my_eam_dart_model}/${my_dart_build_dir_name:?}"
   local yyyymm obs_file i enstr case_name ref_dir run_dir input_file
   local required_files=()
 

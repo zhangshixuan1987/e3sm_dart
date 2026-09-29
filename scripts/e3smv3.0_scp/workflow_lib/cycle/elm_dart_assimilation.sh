@@ -211,7 +211,7 @@ elm_preflight() {
   done
 }
 
-ELM_WORK="${my_elm_dart_code}/models/${my_elm_dart_model}/work"
+ELM_WORK="${my_elm_dart_code}/models/${my_elm_dart_model}/${my_dart_build_dir_name:?}"
 ELM_STAMP=$(printf '%04d-%02d-%02d-%05d' "$((10#${DART_YEAR}))" "$((10#${DART_MONTH}))" "$((10#${DART_DAY}))" "$((10#${DART_SECONDS}))")
 ELM_RUNROOT="${my_elm_dart_run_dir}"
 # Strongly coupled cross passes (ELM_PASS_TAG) use their own directory and record.
